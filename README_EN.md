@@ -79,7 +79,7 @@ Notes:
 ## Model Quantization
 
 
-XiaoMi SD adopts Post-Training Quantization (PTQ) to convert the Float32 model into an INT8 quantized model. PTQ process reduces the model size to approximately $/frac{1}{4}$ of its original size, making the model size about 1.1GB.
+XiaoMi SD adopts Post-Training Quantization (PTQ) to convert the Float32 model into an INT8 quantized model. PTQ process reduces the model size to approximately $`\frac{1}{4}`$ of its original size, making the model size about 1.1GB.
 The model is quantized by collecting high-quality calibration data and optimizing quantization methods: 
 * Calibration Data Collection: Collect high-quality prompt datasets from various domains as calibration datasets. 
 * Quantization Calibration Method: Use the AdaRound quantization algorithm and high-precision per-channel quantization methods to pick the optimal 8-bit fixed-point values for floating-point weight parameters. 
