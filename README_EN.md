@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT%202.0-blue.svg)](LICENSE)
 
-You can try to runn the Stable Diffusion model using the following on device deployment framework.
+You can try our text2image model using the provided on device deployment framework.
 
 <img src="assets/dog.jpg" alt="drawing" width="200"/> <img src="assets/universe.jpg" alt="drawing" width="200"/> <img src="assets/girl.jpg" alt="drawing" width="200"/>
 
