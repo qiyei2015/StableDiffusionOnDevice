@@ -93,7 +93,6 @@ int QCOMModel::load(const std::string &path, int device_id) {
                 dynamicloadutil::getQnnSystemFunctionPointers(systemLibraryPath,
                                                               &qnnFunctionPointers);
         if (dynamicloadutil::StatusCode::SUCCESS != statusCode) {
-            LOGI("ZZY THIS STATUSCODE IS %d", statusCode);
             LOGE("Error initializing QNN System Function Pointers");
             return -1;
         }
