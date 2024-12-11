@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2019-2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2019-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -46,10 +46,12 @@ StatusCode readDataFromFile(std::string filePath,
                             uint8_t* buffer);
 
 /*
- * Read data in batches from Queue and try to matches the model input's
- * batches. If the queue is empty while matching the batch size of model,
+ * Read data in batches from vector and try to matches the model input's
+ * batches. If the vector is empty while matching the batch size of model,
  * pad the remaining buffer with zeros
- * @param filePathsQueue image paths queue
+ * @param filePaths image paths vector
+ * @param filePathsIndexOffset index offset in the vector
+ * @param loopBackToStart loop the vector to fill the remaining tensor data
  * @param dims model input dimensions
  * @param dataType to create input buffer from file
  * @param buffer to fill the input image data
@@ -57,13 +59,16 @@ StatusCode readDataFromFile(std::string filePath,
  * @return ReadBatchDataRetType_t returns numFilesCopied and batchSize along
  * with status
  */
-ReadBatchDataRetType_t readBatchDataAndUpdateQueue(std::queue<std::string>& filePaths,
-                                                   std::vector<size_t> dims,
-                                                   Qnn_DataType_t dataType,
-                                                   uint8_t* buffer);
+ReadBatchDataRetType_t readBatchData(const std::vector<std::string>& filePaths,
+                                     const size_t filePathsIndexOffset,
+                                     const bool loopBackToStart,
+                                     const std::vector<size_t>& dims,
+                                     const Qnn_DataType_t dataType,
+                                     uint8_t* buffer);
 
 StatusCode readBinaryFromFile(std::string filePath, uint8_t* buffer, size_t bufferSize);
 
+#ifndef __hexagon__
 StatusCode writeDataToFile(std::string fileDir,
                            std::string fileName,
                            std::vector<size_t> dims,
@@ -81,6 +86,7 @@ StatusCode writeBinaryToFile(std::string fileDir,
                              std::string fileName,
                              uint8_t* buffer,
                              size_t bufferSize);
+#endif
 
 template <typename T_QuantType>
 datautil::StatusCode floatToTfN(
@@ -107,6 +113,7 @@ const std::map<Qnn_DataType_t, size_t> g_dataTypeToSize = {
     {QNN_DATATYPE_UINT_64, 8},
     {QNN_DATATYPE_FLOAT_16, 2},
     {QNN_DATATYPE_FLOAT_32, 4},
+    {QNN_DATATYPE_FLOAT_64, 8},
     {QNN_DATATYPE_SFIXED_POINT_8, 1},
     {QNN_DATATYPE_SFIXED_POINT_16, 2},
     {QNN_DATATYPE_SFIXED_POINT_32, 4},

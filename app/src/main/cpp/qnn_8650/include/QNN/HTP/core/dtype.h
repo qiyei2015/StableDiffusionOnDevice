@@ -14,6 +14,7 @@
 #include "dtype_enum.h"
 #include "float16.h"
 #include "macros_attribute.h"
+#include "weak_linkage.h"
 
 template <DType DT> struct dtype_traits {
 };
@@ -88,17 +89,28 @@ template <> struct dtype_traits<DType::QInt8> {
     static const bool is_float = false;
     static const storage_type minus_inf_code = 128;
 };
+template <> struct dtype_traits<DType::Int64> {
+    typedef NN_INT64_T element_type;
+    typedef NN_UINT64_T storage_type;
+    static const int element_size = sizeof(element_type);
+    static const bool is_quant = false;
+    static const bool is_float = false;
+    static const storage_type minus_inf_code = 1llu << 63;
+};
 
 // 'runtime' attributes
 // E.g. Dtype_info(d).elbytes gives the element size.
 struct dtype_info {
     unsigned elbytes : 8;
+    DType dtype : 8;
     unsigned is_quant : 1;
     unsigned is_float : 1;
     unsigned is_signed : 1;
 };
 
+PUSH_VISIBILITY(default)
 API_EXPORT dtype_info DType_info(DType d); // in graph.cc
+POP_VISIBILITY()
 
 namespace hnnx {
 namespace dtype_private {
@@ -107,6 +119,7 @@ template <DType DT> dtype_info constexpr inline dtype_info_for()
     typedef dtype_traits<DT> traits;
     return dtype_info{
             sizeof(typename traits::element_type), //elbytes
+            DT, // dtype
             traits::is_quant, //is_quant
             traits::is_float, //is_float
             (std::is_signed<typename traits::element_type>::value ? 1 : 0) //is_signed
@@ -116,6 +129,7 @@ template <> dtype_info constexpr inline dtype_info_for<DType::UNKNOWN>()
 {
     return dtype_info{
             0, //elbytes
+            DType::UNKNOWN, // dtype
             0, //is_quant
             0, //is_float
             0 //is_signed
@@ -143,14 +157,18 @@ inline constexpr dtype_info DType_info_inline(DType d)
         return dtype_info_for<DType::QInt32>();
     case DType::QInt8:
         return dtype_info_for<DType::QInt8>();
+    case DType::Int64:
+        return dtype_info_for<DType::Int64>();
     default:
         return dtype_info_for<DType::UNKNOWN>();
     }
 }
 } //namespace dtype_private
-} // namespace hnnx
 
-/* Maybe instead of functions these should be template constexpr variables? */
+template <DType DT> // maps DT -> constexpr dtype_info
+constexpr dtype_info dtype_info_v = dtype_private::dtype_info_for<DT>();
+
+} // namespace hnnx
 
 template <typename TINTERFACE> constexpr DType dtype_of_type()
 {

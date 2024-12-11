@@ -22,9 +22,10 @@ struct OpExtraInfo {
 
     OpId id;
     Chkpts chkpts;
+    bool for_hlx;
     const char *op_tag;
-    explicit OpExtraInfo(OpId id_in) : id(id_in), chkpts(-1, -1) {}
-    OpExtraInfo(OpId id_in, int cg, int dc) : id(id_in), chkpts(cg, dc) {}
+    explicit OpExtraInfo(OpId id_in) : id(id_in), chkpts(-1, -1), for_hlx(false) {}
+    OpExtraInfo(OpId id_in, int cg, int dc) : id(id_in), chkpts(cg, dc), for_hlx(false) {}
     OpExtraInfo() : OpExtraInfo(0) {}
 
     bool valid() const { return id != 0; };

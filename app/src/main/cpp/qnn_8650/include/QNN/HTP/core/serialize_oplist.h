@@ -58,6 +58,10 @@ class SerOpsInterface {
   protected:
     SerOpsInterface() = default;
     ~SerOpsInterface() = default;
+    SerOpsInterface(SerOpsInterface const &) = delete;
+    SerOpsInterface &operator=(const SerOpsInterface &) = delete;
+    SerOpsInterface(SerOpsInterface &&) = delete;
+    SerOpsInterface &operator=(SerOpsInterface &&) = delete;
     // Common handler for op_typical, op_variadic, op_typical_with_extra.
     // mode = 0 for op_typical
     //       = 1 for op_variadic
@@ -99,8 +103,8 @@ class SerOpsInterface {
     virtual void graph_io_tensors(unsigned n_in, uptr_Tensor const *in_tensors, unsigned n_out,
                                   uptr_Tensor const *out_tensors, bool is_prescan = false) = 0;
     virtual void checkpoints_table(hnnx::Checkpoints const &) = 0;
-    virtual void before_runlists(unsigned nops_norun, unsigned nops_main, unsigned nops_vector,
-                                 unsigned nops_mtx) = 0; // call before serializing 'non-runlist'
+    virtual void before_runlists(unsigned nops_norun, unsigned nops_main, unsigned nops_vector, unsigned nops_mtx,
+                                 unsigned nops_elt) = 0; // call before serializing 'non-runlist'
     virtual void after_non_runlist() = 0; // call after serializing 'non_runlist', before 'combined runlist'
     virtual void after_runlist() = 0; // call after runlist complete.
 
@@ -111,9 +115,9 @@ class SerOpsInterface {
     static constexpr unsigned tensMODE_shape = 2; // TensorShape<Rank>
     static constexpr unsigned tensMODE_scalar = 3; // TensorSlcrDT<DT>
 
-    // This is called directly before serializing each op; op_seqno is the 0-based index
+    // This is called to serialize each op; op_seqno is the 0-based index
     // (i.e. the number of ops previously serialized).
-    virtual void add_op_marker(unsigned op_seqno) = 0;
+    virtual void serialize_op(Op const &, unsigned op_seqno) = 0;
     // to be called from TypicalOpIoBase<N_OUT, N_IN>::serialize
     template <size_t N_IN, size_t N_OUT>
     inline void op_typical(Op const *op, std::array<const Tensor *, N_IN> const &inputs,
@@ -192,6 +196,10 @@ class OpSerHandle {
 
   public:
     inline ~OpSerHandle() { owner.spcl_done(*this); }
+    OpSerHandle(const OpSerHandle &) = delete;
+    OpSerHandle &operator=(const OpSerHandle &) = delete;
+    OpSerHandle(OpSerHandle &&) = delete;
+    OpSerHandle &operator=(OpSerHandle &&) = delete;
     //////////////////////////////
     // add literal u32 values
     // (1) generic ptr/offs

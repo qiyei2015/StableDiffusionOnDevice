@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2020, 2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2020, 2022-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -31,14 +31,15 @@ enum class InputDataType { FLOAT, NATIVE, INVALID };
 OutputDataType parseOutputDataType(std::string dataTypeString);
 InputDataType parseInputDataType(std::string dataTypeString);
 
+using PopulateInputTensorsRetType_t = std::tuple<StatusCode, size_t, size_t>;
+
 class IOTensor {
  public:
-  IOTensor() : m_batchSize(1), m_numFilesPopulated(0) {}
-
   StatusCode setupInputAndOutputTensors(Qnn_Tensor_t **inputs,
                                         Qnn_Tensor_t **outputs,
                                         qnn_wrapper_api::GraphInfo_t graphInfo);
 
+#ifndef __hexagon__
   StatusCode writeOutputTensors(uint32_t graphIdx,
                                 size_t startIdx,
                                 char *graphName,
@@ -46,53 +47,56 @@ class IOTensor {
                                 uint32_t numOutputs,
                                 OutputDataType outputDatatype,
                                 uint32_t graphsCount,
-                                std::string outputPath);
+                                std::string outputPath,
+                                size_t numInputFilesPopulated,
+                                size_t outputBatchSize);
+#endif
 
-  StatusCode populateInputTensors(uint32_t graphIdx,
-                                  std::vector<std::queue<std::string>> &filePathsQueue,
-                                  Qnn_Tensor_t *inputs,
-                                  qnn_wrapper_api::GraphInfo_t graphInfo,
-                                  iotensor::InputDataType inputDataType);
-
-  StatusCode populateInputTensors(uint32_t graphIdx,
-                                  std::vector<uint8_t *> inputBuffers,
-                                  Qnn_Tensor_t *inputs,
-                                  qnn_wrapper_api::GraphInfo_t graphInfo,
-                                  InputDataType inputDataType);
+  PopulateInputTensorsRetType_t populateInputTensors(
+      uint32_t graphIdx,
+      const std::vector<std::vector<std::string>> &filePathsVector,
+      const size_t filePathsIndexOffset,
+      const bool loopBackToStart,
+      const std::unordered_map<std::string, uint32_t> &inputNameToIndex,
+      Qnn_Tensor_t *inputs,
+      qnn_wrapper_api::GraphInfo_t graphInfo,
+      iotensor::InputDataType inputDataType);
 
   StatusCode tearDownInputAndOutputTensors(Qnn_Tensor_t *inputs,
                                            Qnn_Tensor_t *outputs,
                                            size_t numInputTensors,
                                            size_t numOutputTensors);
-  StatusCode converQnntensortoFloatBuffer(Qnn_Tensor_t *output,float **out);
 
  private:
-  size_t m_batchSize;
-  size_t m_numFilesPopulated;
+  PopulateInputTensorsRetType_t populateInputTensor(const std::vector<std::string> &filePaths,
+                                                    const size_t filePathsIndexOffset,
+                                                    const bool loopBackToStart,
+                                                    Qnn_Tensor_t *input,
+                                                    InputDataType inputDataType);
 
-  StatusCode populateInputTensor(std::queue<std::string> &filePaths,
-                                 Qnn_Tensor_t *input,
-                                 InputDataType inputDataType);
-
-  StatusCode populateInputTensor(uint8_t *buffer, Qnn_Tensor_t *input, InputDataType inputDataType);
-
-  StatusCode readDataAndAllocateBuffer(std::queue<std::string> &filePaths,
-                                       std::vector<size_t> dims,
-                                       Qnn_DataType_t dataType,
-                                       uint8_t **bufferToCopy);
+  PopulateInputTensorsRetType_t readDataAndAllocateBuffer(const std::vector<std::string> &filePaths,
+                                                          const size_t filePathsIndexOffset,
+                                                          const bool loopBackToStart,
+                                                          std::vector<size_t> dims,
+                                                          Qnn_DataType_t dataType,
+                                                          uint8_t **bufferToCopy);
 
   template <typename T>
   StatusCode allocateBuffer(T **buffer, size_t &elementCount);
 
+#ifndef __hexagon__
   StatusCode convertToFloat(float **out, Qnn_Tensor_t *output);
 
   StatusCode convertAndWriteOutputTensorInFloat(Qnn_Tensor_t *output,
                                                 std::vector<std::string> outputPaths,
-                                                std::string fileName);
+                                                std::string fileName,
+                                                size_t outputBatchSize);
 
   StatusCode writeOutputTensor(Qnn_Tensor_t *output,
                                std::vector<std::string> outputPaths,
-                               std::string fileName);
+                               std::string fileName,
+                               size_t outputBatchSize);
+#endif
 
   StatusCode allocateAndCopyBuffer(uint8_t **buffer, Qnn_Tensor_t *tensor);
 

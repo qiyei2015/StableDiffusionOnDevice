@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2021 Qualcomm Technologies, Inc.
+// Copyright (c) Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -14,12 +14,13 @@
 #include "cost_funcs.h"
 #include "op_info.h"
 #include "op_package_name.h"
+#include "size_align_code.h"
 
 #include <memory>
 #include <string>
 #include <utility>
 
-#if !defined(ANDROID) && !(defined(_WIN32) && defined(_M_ARM64))
+#if !defined(ANDROID) && !(defined(_WIN32) && defined(_M_ARM64) && defined(PREPARE_DISABLED))
 #define DESERIALIZATION_ENABLED 1
 #else
 #define DESERIALIZATION_ENABLED 0
@@ -43,8 +44,9 @@ struct op_reg_parms {
     Flags_word flags;
 #endif
 #if DESERIALIZATION_ENABLED == 1
-    size_t alignment;
-    size_t size;
+    size_align_code_t size_align_code;
+    inline constexpr size_t get_size() const { return size_align_code.size(); }
+    inline constexpr size_t get_align() const { return size_align_code.align(); }
 #endif
     template <typename Derived, int N> static constexpr op_reg_parms parms_for();
 };
@@ -62,13 +64,13 @@ template <typename Derived, int N> [[gnu::always_inline]] constexpr op_reg_parms
                 Derived::get_tensor_deserializer_register_func(),
                 test_flag_for(flags_for<Derived, N>(), Flags::IS_CONST) ? nullptr
                                                                         : alloc_func_for_op<Derived>::alloc_func,
-                !std::is_trivially_destructible<Derived>::value ? dealloc_func_for_op<Derived>::dealloc_func : nullptr,
+                !std::is_trivially_destructible<Derived>::value ? dealloc_func_for_op<Derived>::func : nullptr,
 #endif
 #ifndef PREPARE_DISABLED
                 get_costf<Derived>(), flags_for<Derived, N>(),
 #endif
 #if DESERIALIZATION_ENABLED == 1
-                alignof(Derived), sizeof(Derived)
+                alloc_func_for_op<Derived>::op_size_align,
 #endif
     };
 }

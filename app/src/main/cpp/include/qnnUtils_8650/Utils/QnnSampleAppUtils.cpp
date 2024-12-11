@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2019-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) 2019-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -15,9 +15,11 @@
 #include <tuple>
 
 #include "Logger.hpp"
+#ifndef __hexagon__
 #include "PAL/Directory.hpp"
 #include "PAL/FileOp.hpp"
 #include "PAL/Path.hpp"
+#endif
 #include "PAL/StringOp.hpp"
 #include "QnnSampleAppUtils.hpp"
 #include "QnnTypeMacros.hpp"
@@ -55,18 +57,21 @@ void sample_app::parseInputFilePaths(std::vector<std::string> &inputFilePaths,
 
 sample_app::ReadInputListsRetType_t sample_app::readInputLists(
     std::vector<std::string> inputFileListPaths) {
-  std::vector<std::vector<std::queue<std::string>>> filePathsLists;
+  std::vector<std::vector<std::vector<std::string>>> filePathsLists;
+  std::vector<std::unordered_map<std::string, uint32_t>> inputNameToIndexMaps;
   for (auto const &path : inputFileListPaths) {
     bool readSuccess;
-    std::vector<std::queue<std::string>> filePathList;
-    std::tie(filePathList, readSuccess) = readInputList(path);
+    std::vector<std::vector<std::string>> filePathList;
+    std::unordered_map<std::string, uint32_t> inputNameToIndex;
+    std::tie(filePathList, inputNameToIndex, readSuccess) = readInputList(path);
     if (!readSuccess) {
       filePathsLists.clear();
-      return std::make_tuple(filePathsLists, false);
+      return std::make_tuple(filePathsLists, inputNameToIndexMaps, false);
     }
     filePathsLists.push_back(filePathList);
+    inputNameToIndexMaps.push_back(inputNameToIndex);
   }
-  return std::make_tuple(filePathsLists, true);
+  return std::make_tuple(filePathsLists, inputNameToIndexMaps, true);
 }
 
 sample_app::ReadInputListRetType_t sample_app::readInputList(const std::string inputFileListPath) {
@@ -74,19 +79,31 @@ sample_app::ReadInputListRetType_t sample_app::readInputList(const std::string i
   std::ifstream fileListStream(inputFileListPath);
   if (!fileListStream) {
     QNN_ERROR("Failed to open input file: %s", inputFileListPath.c_str());
-    std::vector<std::queue<std::string>> result;
-    return std::make_tuple(result, false);
+    return std::make_tuple(std::vector<std::vector<std::string>>{},
+                           std::unordered_map<std::string, uint32_t>{},
+                           false);
   }
+
   std::string fileLine;
   while (std::getline(fileListStream, fileLine)) {
     if (fileLine.empty()) continue;
     lines.push(fileLine);
   }
+
   if (!lines.empty() && lines.front().compare(0, 1, "#") == 0) {
     lines.pop();
   }
+
+  if (!lines.empty() && lines.front().compare(0, 1, "%") == 0) {
+    lines.pop();
+  }
+
   std::string separator = ":=";
-  std::vector<std::queue<std::string>> filePathsList;
+  std::vector<std::vector<std::string>> filePathsList;
+  std::unordered_map<std::string, uint32_t> inputNameToIndex;
+  if (!lines.empty()) {
+    inputNameToIndex = extractInputNameIndices(lines.front(), separator);
+  }
   while (!lines.empty()) {
     std::vector<std::string> paths{};
     std::vector<std::string> inputFilePaths;
@@ -95,13 +112,43 @@ sample_app::ReadInputListRetType_t sample_app::readInputList(const std::string i
     filePathsList.reserve(paths.size());
     for (size_t idx = 0; idx < paths.size(); idx++) {
       if (idx >= filePathsList.size()) {
-        filePathsList.push_back(std::queue<std::string>());
+        filePathsList.push_back(std::vector<std::string>());
       }
-      filePathsList[idx].push(paths[idx]);
+      filePathsList[idx].push_back(paths[idx]);
     }
     lines.pop();
   }
-  return std::make_tuple(filePathsList, true);
+  return std::make_tuple(filePathsList, inputNameToIndex, true);
+}
+
+std::unordered_map<std::string, uint32_t> sample_app::extractInputNameIndices(
+    const std::string &inputLine, const std::string &separator) {
+  std::vector<std::string> inputFilePaths;
+  std::unordered_map<std::string, uint32_t> inputNameToIndex;
+  split(inputFilePaths, inputLine, ' ');
+  size_t inputCount = 0;
+  for (uint32_t idx = 0; idx < inputFilePaths.size(); idx++) {
+    auto position = inputFilePaths[idx].find(separator);
+    if (position != std::string::npos) {
+      auto unsanitizedTensorName = inputFilePaths[idx].substr(0, position);
+      auto sanitizedTensorName   = sanitizeTensorName(unsanitizedTensorName);
+      if (sanitizedTensorName != unsanitizedTensorName) {
+        inputNameToIndex[unsanitizedTensorName] = idx;
+      }
+      inputNameToIndex[sanitizedTensorName] = idx;
+      inputCount                            = inputCount + 1;
+    }
+  }
+  return inputCount == inputFilePaths.size() ? inputNameToIndex
+                                             : std::unordered_map<std::string, uint32_t>{};
+}
+
+std::string sample_app::sanitizeTensorName(std::string name) {
+  std::string sanitizedName = std::regex_replace(name, std::regex("\\W+"), "_");
+  if (!std::isalpha(sanitizedName[0]) && sanitizedName[0] != '_') {
+    sanitizedName = "_" + sanitizedName;
+  }
+  return sanitizedName;
 }
 
 sample_app::ProfilingLevel sample_app::parseProfilingLevel(std::string profilingLevelString) {
@@ -179,7 +226,16 @@ bool sample_app::deepCopyQnnTensorInfo(Qnn_Tensor_t *dst, const Qnn_Tensor_t *sr
                              QNN_TENSOR_GET_DIMENSIONS(src),
                              QNN_TENSOR_GET_RANK(src) * sizeof(uint32_t));
     }
+    if (QNN_TENSOR_GET_IS_DYNAMIC_DIMENSIONS(src)) {
+      QNN_TENSOR_SET_IS_DYNAMIC_DIMENSIONS(
+          dst, (uint8_t *)malloc(QNN_TENSOR_GET_RANK(src) * sizeof(uint8_t)));
+      pal::StringOp::memscpy(QNN_TENSOR_GET_IS_DYNAMIC_DIMENSIONS(dst),
+                             QNN_TENSOR_GET_RANK(src) * sizeof(uint8_t),
+                             QNN_TENSOR_GET_IS_DYNAMIC_DIMENSIONS(src),
+                             QNN_TENSOR_GET_RANK(src) * sizeof(uint8_t));
+    }
   }
+  QNN_TENSOR_SET_SPARSE_PARAMS(dst, QNN_TENSOR_GET_SPARSE_PARAMS(src));
   return true;
 }
 

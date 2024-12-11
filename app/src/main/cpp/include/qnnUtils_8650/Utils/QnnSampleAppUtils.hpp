@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2019-2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2019-2023 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -10,7 +10,9 @@
 #include <iostream>
 #include <map>
 #include <queue>
+#include <regex>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -22,13 +24,21 @@ namespace sample_app {
 
 enum class ProfilingLevel { OFF, BASIC, DETAILED, INVALID };
 
-using ReadInputListRetType_t = std::tuple<std::vector<std::queue<std::string>>, bool>;
+using ReadInputListRetType_t = std::
+    tuple<std::vector<std::vector<std::string>>, std::unordered_map<std::string, uint32_t>, bool>;
 
 ReadInputListRetType_t readInputList(std::string inputFileListPath);
 
-using ReadInputListsRetType_t = std::tuple<std::vector<std::vector<std::queue<std::string>>>, bool>;
+using ReadInputListsRetType_t = std::tuple<std::vector<std::vector<std::vector<std::string>>>,
+                                           std::vector<std::unordered_map<std::string, uint32_t>>,
+                                           bool>;
 
 ReadInputListsRetType_t readInputLists(std::vector<std::string> inputFileListPath);
+
+std::unordered_map<std::string, uint32_t> extractInputNameIndices(const std::string &inputLine,
+                                                                  const std::string &separator);
+
+std::string sanitizeTensorName(std::string name);
 
 ProfilingLevel parseProfilingLevel(std::string profilingLevelString);
 

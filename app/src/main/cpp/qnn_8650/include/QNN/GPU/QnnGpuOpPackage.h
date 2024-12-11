@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2020-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) 2020-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -356,6 +356,8 @@ typedef struct _QnnOpPackage_Node_t {
   const Qnn_OpConfig_t** configs;
   /// Null-terminated array of tensor storage type pointers called out in the config
   const QnnGpu_TensorStorageType_t** storageTypes;
+  /// Kernel variant index, if set then used by OpPackage to determine kernel selection
+  int32_t kernelVariant;
 } QnnGpuOpPackage_Node_t;
 
 //=============================================================================
@@ -548,6 +550,34 @@ typedef enum {
 } QnnGpu_KernelSourceType_t;
 
 /**
+ * @brief This enum defines QNN GPU kernel tuning options.
+ */
+typedef enum {
+  /// local work size tuning
+  QNN_GPU_KERNEL_TUNING_LOCAL_WORK_SIZE = 0,
+  QNN_GPU_KERNEL_TUNING_UNDEFINED       = 0x7FFFFFFF
+} QnnGpu_KernelTuningOption_t;
+
+/**
+ * @brief This struct provides local-work-size tuning configuration.
+ */
+typedef struct {
+  uint32_t minValue[3];
+  uint32_t maxValue[3];
+  uint32_t stepSize[3];
+} QnnGpu_KernelLocalWorkSizeTuning_t;
+
+/**
+ * @brief This struct provides QNN GPU kernel tuning configuration.
+ */
+typedef struct {
+  QnnGpu_KernelTuningOption_t option;
+  union UNNAMED {
+    QnnGpu_KernelLocalWorkSizeTuning_t lws;
+  };
+} QnnGpu_KernelTuningConfig_t;
+
+/**
  * @brief A QNN GPU struct specifying a kernel.
  */
 typedef struct {
@@ -573,6 +603,8 @@ typedef struct {
   const char* name;
   /// If non-zero, kernel will be enqueued during execute even if it is static
   uint32_t isDynamic;
+  /// Null-terminated array to provide kernel tuning configurations.
+  QnnGpu_KernelTuningConfig_t** tuningConfigs;
   /// Reserved field, must be null
   void* reserved;
 } QnnGpu_Kernel_t;
@@ -592,6 +624,7 @@ typedef struct {
     NULL,                            /*args*/            \
     NULL,                            /*name*/            \
     0u,                              /*isDynamic*/       \
+    NULL,                            /*tuningConfigs*/   \
     NULL                             /*reserved*/        \
   }
 // clang-format on

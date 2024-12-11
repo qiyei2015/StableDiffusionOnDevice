@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <limits>
 
@@ -246,22 +247,28 @@ template <typename TOUT, typename TIN> inline constexpr TOUT saturate_cast(TIN v
 #ifndef __hexagon__
 template <typename TOUT> inline TOUT saturate_round(float val)
 {
-    static_assert(sizeof(TOUT) <= 4 && std::numeric_limits<TOUT>::is_integer);
+    static_assert(sizeof(TOUT) <= 8 && std::numeric_limits<TOUT>::is_integer);
     return saturate_cast<TOUT>(std::nearbyintf(val));
 }
 
 #else
 template <typename TOUT> inline TOUT saturate_round(float val)
 {
-    static_assert(sizeof(TOUT) <= 4 && std::numeric_limits<TOUT>::is_integer);
-    if constexpr (sizeof(TOUT) == 4 && !std::numeric_limits<TOUT>::is_signed) {
+    static_assert(sizeof(TOUT) <= 8 && std::numeric_limits<TOUT>::is_integer);
+    if constexpr ((sizeof(TOUT) == 8) && !std::numeric_limits<TOUT>::is_signed) {
+        // convert to unsigned u64, rounding, saturating
+        return Q6_P_convert_sf2ud_R(val);
+    } else if constexpr ((sizeof(TOUT) == 8) && std::numeric_limits<TOUT>::is_signed) {
+        // convert to int64, rounding
+        return Q6_P_convert_sf2d_R(val);
+    } else if constexpr ((sizeof(TOUT) == 4) && !std::numeric_limits<TOUT>::is_signed) {
         // convert to unsigned u32, rounding, saturating
         return Q6_R_convert_sf2uw_R(val);
     } else {
         // convert to int32,rounding;
         int const r = Q6_R_convert_sf2w_R(val);
-        if constexpr (sizeof(TOUT) < 4) return hnnx::scast::q6_sat_int<TOUT>::op(r);
-        return r;
+        if constexpr (sizeof(TOUT) < 4) return static_cast<TOUT>(hnnx::scast::q6_sat_int<TOUT>::op(r));
+        return static_cast<TOUT>(r);
     }
 }
 #endif
@@ -497,7 +504,8 @@ inline int64_t /*constexpr*/ muli64_sat(int64_t a, int64_t b)
 {
     int64_t prod = 0;
     if (HEX_MUL_OVERFLOW(a, b, &prod)) {
-        prod = ((a ^ b) >= 0) ? std::numeric_limits<int64_t>::max() : std::numeric_limits<int64_t>::min();
+        prod = (int64_t(uint64_t(a) ^ uint64_t(b)) >= 0) ? std::numeric_limits<int64_t>::max()
+                                                         : std::numeric_limits<int64_t>::min();
     }
     return prod;
 }
@@ -569,11 +577,12 @@ inline uint64_t constexpr mulu64_modular(uint64_t a, uint64_t b)
 template <typename TOUT, typename TIN> inline constexpr TOUT image_convert(TIN x)
 {
     static_assert(sizeof(TOUT) == sizeof(TIN));
-    union {
-        TIN tin;
-        TOUT tout;
-    } const uu{x};
-    return uu.tout;
+    static_assert(std::is_trivially_copyable_v<TOUT>);
+    static_assert(std::is_trivially_copyable_v<TIN>);
+    static_assert(std::is_trivially_constructible_v<TOUT>);
+    TOUT out;
+    std::memcpy(&out, &x, sizeof(TOUT));
+    return out;
 }
 
 // round up A to a multiple of B.

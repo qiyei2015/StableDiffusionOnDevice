@@ -17,19 +17,23 @@
 #include "op_register_types.h"
 #include "op_package_name.h"
 #include "template_help.h"
+#include "weak_linkage.h"
+#include "dynamic_tensors.h"
 
 #include <memory>
 #include <string>
 #include <utility>
 
 namespace hnnx {
+PUSH_VISIBILITY(default)
 
-const OpFactory make_op_custom_internal(const std::string_view op_name_in, const std::string_view type_tag,
-                                        op_reg_parms const &opreg_parms, bool is_external = false);
+API_EXPORT OpFactory make_op_custom_internal(const std::string_view op_name_in, const std::string_view type_tag,
+                                             op_reg_parms const &opreg_parms, bool is_external = false);
 
-extern const OpFactory make_op_custom(const std::string_view op_name_in, std::string_view const type_tag,
-                                      op_reg_parms const &opreg_parms);
+API_EXPORT OpFactory make_op_custom(const std::string_view op_name_in, std::string_view const type_tag,
+                                    op_reg_parms const &opreg_parms);
 
+POP_VISIBILITY()
 template <bool IS_SIMPLE> struct item_return {
 };
 
@@ -79,7 +83,7 @@ template <> class GetParms<true> {
 
 } // namespace hnnx
 
-/** ModifiedDerivedType is used to perform a transformation from 
+/** ModifiedDerivedType is used to perform a transformation from
  * Tensor_TCM -> Tensor for different tensor types. Both FLAGS_FOR and
  * APPEND_REG_OP_ELEM use this metafunction to implement TCM folding for execute.
  * For more details, see docs/register-op-tcm-folding.md
@@ -101,6 +105,7 @@ template <auto, int> struct ModifiedDerivedType;
     (hnnx::ConcatStr<hnnx::ConstexprStrLen(OP), hnnx::ConstexprStrLen(NMVRT) + hnnx::ConstexprStrLen(ARGS)>(           \
             OP, (hnnx::ConcatStr<hnnx::ConstexprStrLen(NMVRT), hnnx::ConstexprStrLen(ARGS)>(NMVRT, ARGS).data())))
 
+#ifndef OP_REG_COMPILE
 #define DEF_NATIVE_OP(F, OP, LINE) DEF_NATIVE_OP_NMVRT(F, F, OP, "", LINE)
 
 #define DEF_NATIVE_OP_NO_TCM_FOLDING(F, OP) DEF_NATIVE_OP_NMVRT_NO_TCM_FOLDING(F, F, OP, "")
@@ -112,6 +117,14 @@ template <auto, int> struct ModifiedDerivedType;
 #define DEF_NATIVE_OP_NMVRT_NO_TCM_FOLDING(F, W, OP, NMVRT)                                                            \
     APPEND_REG_OP_ELEM_NO_TCM_FOLDING(W, THIS_PKG_NAME_STR "::" OP,                                                    \
                                       TYPE_SUFFIX(OP, NMVRT, hnnx::ArgsTuples2<F>::inputTypeNames), false)
+
+#else
+#define DEF_NATIVE_OP(F, OP, LINE)                          __reg_op__(F, OP)<<<__FILE__, __LINE__>>>
+#define DEF_NATIVE_OP_NO_TCM_FOLDING(F, OP)                 __reg_op__(F, OP)<<<__FILE__, __LINE__>>>
+#define DEF_NATIVE_OP_NMVRT(F, W, OP, NMVRT, LINE)          __reg_op__(F, OP)<<<__FILE__, __LINE__>>>
+#define DEF_NATIVE_OP_NMVRT_NO_TCM_FOLDING(F, W, OP, NMVRT) __reg_op__(F, OP)<<<__FILE__, __LINE__>>>
+#endif
+
 // TCM folding is an optimization to reduce skel size, so we only need it for execute.
 #if defined(PREPARE_DISABLED) && !defined(TCM_FOLDING_DISABLED)
 #define REGISTER_OP(F, STR) DEF_NATIVE_OP(F, STR, __LINE__)
@@ -145,6 +158,26 @@ template <auto, int> struct ModifiedDerivedType;
     FLAGS_FOR_DT_NO_TCM_FOLDING(F, Flags::RESOURCE_HVX, Flags::IS_COPY)                                                \
     REGISTER_OP_NO_TCM_FOLDING(F, STR)
 
+#define REGISTER_OP_HLX_EXT(F, STR, NMVRT)                                                                             \
+    FLAGS_FOR_DT_NO_TCM_FOLDING(F, Flags::RESOURCE_HLX)                                                                \
+    REGISTER_OP_EXT(F, STR, NMVRT)
+
+#define REGISTER_OP_HLX(F, STR)                                                                                        \
+    FLAGS_FOR_DT(F, Flags::RESOURCE_HLX)                                                                               \
+    REGISTER_OP(F, STR)
+
+#define REGISTER_OP_HLX_NO_TCM_FOLDING(F, STR)                                                                         \
+    FLAGS_FOR_DT_NO_TCM_FOLDING(F, Flags::RESOURCE_HLX)                                                                \
+    REGISTER_OP_NO_TCM_FOLDING(F, STR)
+
+#define REGISTER_OP_HLX_COPY(F, STR)                                                                                   \
+    FLAGS_FOR_DT(F, Flags::RESOURCE_HLX, Flags::IS_COPY);                                                              \
+    REGISTER_OP(F, STR)
+
+#define REGISTER_OP_HLX_COPY_NO_TCM_FOLDING(F, STR)                                                                    \
+    FLAGS_FOR_DT_NO_TCM_FOLDING(F, Flags::RESOURCE_HLX, Flags::IS_COPY)                                                \
+    REGISTER_OP_NO_TCM_FOLDING(F, STR)
+
 #define REGISTER_OP_HMX(F, STR)                                                                                        \
     FLAGS_FOR_DT(F, Flags::RESOURCE_HMX);                                                                              \
     REGISTER_OP(F, STR)
@@ -155,6 +188,10 @@ template <auto, int> struct ModifiedDerivedType;
 
 #define REGISTER_OP_HVX_SRC_DESTRUCTIVE(F, STR)                                                                        \
     FLAGS_FOR_DT(F, Flags::RESOURCE_HVX, Flags::CAN_BE_SRC_DESTRUCTIVE);                                               \
+    REGISTER_OP(F, STR)
+
+#define REGISTER_OP_HLX_SRC_DESTRUCTIVE(F, STR)                                                                        \
+    FLAGS_FOR_DT(F, Flags::RESOURCE_HLX, Flags::CAN_BE_SRC_DESTRUCTIVE);                                               \
     REGISTER_OP(F, STR)
 
 #define REGISTER_OP_HVX_SRC_DESTRUCTIVE_NO_TCM_FOLDING(F, STR)                                                         \
@@ -174,4 +211,16 @@ template <auto, int> struct ModifiedDerivedType;
     FLAGS_FOR_DT(F, Flags::IS_CONST);                                                                                  \
     REGISTER_OP(F, STR)
 
+#define REGISTER_OP_DYN(F, STR, VAL_F)                                                                                 \
+    REGISTER_OP((dyn_validation_general<decltype(&F), decltype(&VAL_F), F, VAL_F>::wrapper_impl), STR "_dyn")
+
+#define REGISTER_OP_DYN_FLAGS(F, STR, VAL_F, ...)                                                                      \
+    FLAGS_FOR_DT((dyn_validation_general<decltype(&F), decltype(&VAL_F), F, VAL_F>::wrapper_impl), __VA_ARGS__);       \
+    REGISTER_OP((dyn_validation_general<decltype(&F), decltype(&VAL_F), F, VAL_F>::wrapper_impl), STR "_dyn")
+
+#define REGISTER_OP_DYN_FLAGS_NO_TCM_FOLDING(F, STR, VAL_F, ...)                                                       \
+    FLAGS_FOR_DT_NO_TCM_FOLDING((dyn_validation_general<decltype(&F), decltype(&VAL_F), F, VAL_F>::wrapper_impl),      \
+                                __VA_ARGS__);                                                                          \
+    REGISTER_OP_NO_TCM_FOLDING((dyn_validation_general<decltype(&F), decltype(&VAL_F), F, VAL_F>::wrapper_impl),       \
+                               STR "_dyn")
 #endif

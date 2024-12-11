@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2021-2023 Qualcomm Technologies, Inc.
+// Copyright (c) 2021-2024 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -60,6 +60,7 @@ typedef enum {
 
 typedef enum {
   QNN_SYSTEM_CONTEXT_GRAPH_INFO_VERSION_1 = 0x01,
+  QNN_SYSTEM_CONTEXT_GRAPH_INFO_VERSION_2 = 0x02,
   // Unused, present to ensure 32 bits.
   QNN_SYSTEM_CONTEXT_GRAPH_INFO_UNDEFINED = 0x7FFFFFFF
 } QnnSystemContext_GraphInfoVersion_t;
@@ -104,10 +105,46 @@ typedef struct {
   }
 // clang-format on
 
+/**
+ * @brief Struct that provides information about graphs registered with a context.
+ *        This is version V2 of the structure.
+ */
+typedef struct {
+  /// Name of graph
+  const char* graphName;
+  /// Number of input tensors to graph
+  uint32_t numGraphInputs;
+  /// List of input tensors to graph
+  Qnn_Tensor_t* graphInputs;
+  /// Number of output tensors from graph
+  uint32_t numGraphOutputs;
+  /// List of output tensors from graph
+  Qnn_Tensor_t* graphOutputs;
+  /// Number of updatable tensors from graph
+  uint32_t numUpdateableTensors;
+  /// List of updatable tensors from graph
+  Qnn_Tensor_t* updateableTensors;
+} QnnSystemContext_GraphInfoV2_t;
+
+// clang-format off
+/// QnnSystemContext_GraphInfoV1_t initializer macro
+#define QNN_SYSTEM_CONTEXT_GRAPH_INFO_V2_INIT  \
+  {                                            \
+     NULL,    /* graphName */                  \
+     0,       /* numGraphInputs */             \
+     NULL,    /* graphInputs */                \
+     0,       /* numGraphOutputs */            \
+     NULL,    /* graphOutputs */               \
+     0,       /* numUpdateableTensors */        \
+     NULL,    /* updateableTensors */           \
+  }
+// clang-format on
+
 typedef struct {
   QnnSystemContext_GraphInfoVersion_t version;
   union UNNAMED {
     QnnSystemContext_GraphInfoV1_t graphInfoV1;
+    QnnSystemContext_GraphInfoV2_t graphInfoV2;
   };
 } QnnSystemContext_GraphInfo_t;
 
@@ -152,7 +189,7 @@ typedef struct {
   // details about graphs stored in context
   /// Number of context tensors
   uint32_t numContextTensors;
-  /// List of tensors registered to this context
+  /// List of tensors registered to this context. Includes updatable context tensors.
   Qnn_Tensor_t* contextTensors;
   /// Number of graphs registered with this context
   uint32_t numGraphs;

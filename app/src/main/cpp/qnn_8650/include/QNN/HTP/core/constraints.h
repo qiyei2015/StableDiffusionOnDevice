@@ -55,6 +55,9 @@ namespace constraint_lib {
 //! IS_INT32("operand") -> bool   (true if operand has 'Int32' output)
 #define IS_INT32(X) EQ(DTYPE_OF(X), DType::Int32)
 
+//! IS_INT64("operand") -> bool   (true if operand has 'Int64' output)
+#define IS_INT64(X) EQ(DTYPE_OF(X), DType::Int64)
+
 //! IS_QUANT_TYPE("operand") -> bool (true if operand has 'Quantized' output)
 #define IS_QUANT_TYPE(X) OR(IS_QUINT8(X), IS_QINT8(X), IS_QINT16(X), IS_QUINT16(X), IS_QINT32(X))
 //! IS_QUANT_SIGNED("operand") -> bool (true if operand has 'Signed Quantized' output)
@@ -79,6 +82,10 @@ namespace constraint_lib {
 
 //! IS_FLOAT16_BOTH("operand", "operand") -> bool (true if both operands are FP16 type)
 #define IS_FLOAT16_BOTH(X, Y) AND(IS_FLOAT16(X), IS_FLOAT16(Y))
+//! IS_FLOAT16_ALL("operand", ...) -> bool (true if all operands are FP16 type)
+#define IS_FLOAT16_ALL(...) IS_DTYPE_ALL(DType::Float16, __VA_ARGS__)
+//! IS_FLOAT32_ALL("operand", ...) -> bool (true if all operands are FP32 type)
+#define IS_FLOAT32_ALL(...) IS_DTYPE_ALL(DType::Float32, __VA_ARGS__)
 
 //! DIM_CHANNEL("operand") -> unsigned (extract depth dimension, #4)
 #define DIM_CHANNEL(X) DIM_OF(X, 4)
@@ -99,6 +106,8 @@ namespace constraint_lib {
 #define DIM_FILTWIDTH(X) DIM_OF(X, 1)
 //! DIM_FILTHEIGHT("operand") -> unsigned (extract 'filter height' dimension from filter weights, #0)
 #define DIM_FILTHEIGHT(X) DIM_OF(X, 0)
+
+#define MAX_SPARSE_ELEMENTS(X) DIM_OF(X, (MAX_DIMENSIONS - 1))
 
 //! IS_EMPTY_DIM("operand", dim) -> bool (true if size of dim is 0)
 #define IS_EMPTY_DIM(X, DIM) EQ(DIM_OF(X, DIM), 0)

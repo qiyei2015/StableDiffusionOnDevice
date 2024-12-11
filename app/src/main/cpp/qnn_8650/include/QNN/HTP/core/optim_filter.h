@@ -34,7 +34,7 @@ class OptimFilter {
     std::unique_ptr<OptimFilterImplBase> p_impl; // null means never match
   public:
     OptimFilter(std::string const &filter_string);
-    OptimFilter(Graph const &g); // delegates to the other ctor; solves a header ordering problem.
+    OptimFilter(GraphPrepare const &g); // delegates to the other ctor; solves a header ordering problem.
     OptimFilter(OptimFilter &&) = default;
     ~OptimFilter();
     bool test_optim(hnnx::GraphOptInfo const &gi, Match const &m) const
@@ -51,7 +51,7 @@ class OptimFilter {
 class OptimFilter { // this is an empty class when !WITH_OPT_DEBUG
   public:
     OptimFilter(std::string const &filter_string) {}
-    OptimFilter(Graph const &) {}
+    OptimFilter(GraphPrepare const &) {}
     OptimFilter(OptimFilter &&) = default;
     bool test_optim(hnnx::GraphOptInfo const &gi, Match const &m) const { return false; }
 };

@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2020, 2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2020, 2022, 2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -19,7 +19,9 @@ namespace qnn {
 namespace log {
 namespace utils {
 
-void logStdoutCallback(const char* fmt, QnnLog_Level_t level, uint64_t timestamp, va_list argp);
+// In non-hexagon app stdout is used and for hexagon farf logging is used
+void logDefaultCallback(const char* fmt, QnnLog_Level_t level, uint64_t timestamp, va_list argp);
+
 static std::mutex sg_logUtilMutex;
 
 }  // namespace utils

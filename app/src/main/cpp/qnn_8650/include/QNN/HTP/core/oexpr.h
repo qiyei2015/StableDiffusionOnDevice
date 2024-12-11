@@ -1,6 +1,5 @@
 //==============================================================================
-//
-// Copyright (c) 2020,2022,2023 Qualcomm Technologies, Inc.
+// Copyright (c) 2020-2024 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -17,6 +16,8 @@
 #include "macros_attribute.h"
 #include "opname_tag.h"
 #include "weak_linkage.h"
+
+#ifndef PREPARE_DISABLED
 // This file is expected to be #included at top of optimize.h,
 // with oexp_post.h included farther down.
 // #include "optimize.h"
@@ -99,6 +100,8 @@ namespace hnnx {
 template <typename T> class optim_configvar;
 }
 
+PUSH_VISIBILITY(default)
+
 API_EXPORT hnnx::Crate *get_lambda_crate();
 template <typename R> class OptFunction;
 
@@ -108,18 +111,18 @@ template <typename R, typename... Args> class OptFunction<R(Args...)> {
     using OptFunctionTType = R (*)(void *, Args...);
     using OptFunctionType = R (*)(Args...);
 
-    template <typename L> static R LambdaWrapper(void *t, Args... args)
+    template <typename L> API_EXPORT static R LambdaWrapper(void *t, Args... args)
     {
         L *const obj = (L *)t;
         return obj->operator()(args...);
     }
-    static R FunctionWrapper(void *t, Args... args)
+    API_EXPORT static R FunctionWrapper(void *t, Args... args)
     {
         OptFunctionType const obj = (OptFunctionType)t;
         return obj(args...);
     }
     template <typename L>
-    static typename std::enable_if<!std::is_lvalue_reference_v<L>, thisType>::type create(L &&lambda)
+    API_EXPORT static typename std::enable_if<!std::is_lvalue_reference_v<L>, thisType>::type create(L &&lambda)
     {
         L *const l = get_lambda_crate()->emplace<L>(std::forward<L>(lambda));
         return thisType(LambdaWrapper<L>, l);
@@ -127,12 +130,14 @@ template <typename R, typename... Args> class OptFunction<R(Args...)> {
 
     OptFunctionTType mFunc;
     void *mObj;
-    OptFunction() : mFunc(nullptr), mObj(nullptr){};
-    OptFunction(OptFunctionTType f, void *o) : mFunc(f), mObj(o){};
+    API_EXPORT OptFunction() : mFunc(nullptr), mObj(nullptr){};
+    API_EXPORT OptFunction(OptFunctionTType f, void *o) : mFunc(f), mObj(o){};
 
-    R operator()(Args... args) const { return mFunc(mObj, args...); }
-    operator bool() const { return (mFunc != nullptr); }
+    API_EXPORT R operator()(Args... args) const { return mFunc(mObj, args...); }
+    API_EXPORT operator bool() const { return (mFunc != nullptr); }
 };
+
+POP_VISIBILITY()
 
 namespace oExp {
 
@@ -163,6 +168,9 @@ enum class Variant : int {
     config, // <config,   T>  - reads a config var from optim_config_values.
     producer_for,
     eq_opstr, //  -- compares the opstr on a node to a constant
+
+    // Internal Exprs used for for D2RTR
+    d2rtr_constraint,
 };
 // in this namespace, ECtx is the type whose reference gets passed
 // to all the eval methods and std::function objects.
@@ -506,7 +514,8 @@ template <typename T> struct true_modulus {
 
 // Formal definition of ROUNDUP(a,b):
 // T can be int or unsigned ('size_t')
-// UNDEFINED for b <= 0 ( you will get 0, and maybe a runtime warning, some day?)
+// For b == 0, round to next larger power of two
+// UNDEFINED for b < 0 ( you will get 0, and maybe a runtime warning, some day?)
 // roundup(a,1) = a
 // for b>=2: result is a rounded up (towards +inf) to a multiple of b.
 //  So, roundup(15,10) = 20, roundup(-15,10) = -10
@@ -515,10 +524,23 @@ template <typename T> struct true_modulus {
 //
 template <typename T> struct func_roundup {
     static_assert(std::is_integral_v<T>, "ROUNDUP can only apply to integer types");
-
+    inline T roundup_pow2(T a) const
+    {
+        if (a <= 1) return a;
+        a -= 1;
+        a |= a >> 1;
+        a |= a >> 2;
+        a |= a >> 4;
+        a |= a >> 8;
+        a |= a >> 16;
+        a += 1;
+        return a;
+    }
     inline T operator()(T a, T b) const
     {
-        if (b <= 1) return (b == 1) ? a : 0;
+        if (b < 0) return 0;
+        if (b == 0) return roundup_pow2(a);
+        if (b == 1) return a;
         if ((b & (b - 1)) == 0) return (a + (b - 1)) & (~(b - 1));
         // avoid overflow (except in cases where the rounded-up value overflows).
         T rem = a % b;
@@ -762,6 +784,12 @@ template <typename TA, typename TB, typename... Ts> inline constexpr auto AND(TA
     return make_logop<Variant::lg_and>(parms);
 }
 
+//! AND(a,b, ...) - logical AND; evaluation stops after first 'false' operand
+template <typename TA> inline constexpr auto AND(TA &&a)
+{
+    return AND(std::forward<TA>(a), true);
+}
+
 //! XOR(a,b, ...) - logical XOR
 template <typename TA, typename TB, typename... Ts> inline constexpr auto XOR(TA &&a, TB &&b, Ts &&...ts)
 {
@@ -856,7 +884,7 @@ template <typename T, typename EX> sFunction<T> wrap_as_function(EX &&a)
     typedef std::remove_reference_t<EX> EXT;
     if constexpr (std::is_same_v<EXT, sFunction<T>>) {
         return std::forward<EX>(a);
-    } else if constexpr (std::is_same_v<EXT, T> || std::is_arithmetic_v<EXT>) {
+    } else if constexpr (std::is_same_v<std::remove_const_t<EXT>, T> || std::is_arithmetic_v<EXT>) {
         return make_literal_sfunction<T>(a);
     } else if constexpr (std::is_same_v<EXT, expr<Variant::value, T>>) {
         // is an expr<value,T>
@@ -909,4 +937,5 @@ template <OpVnt V, typename ARG> class opexpr {
 // The definitions in oExp namespace which depend on types
 // defined in optimize.h are in the header 'oexpr_post.h'
 
+#endif /* !PREPARE_DISABLED */
 #endif /* OEXPR_H_ */

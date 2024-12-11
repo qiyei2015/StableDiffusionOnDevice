@@ -145,18 +145,21 @@ class SplitHistoryTable {
 
   public:
     SplitHistoryTable() = default;
-    splithist_t make_new_split(int dimno, OpId nodeid, splithist_t oldhist, int nslices, int slice_size,
-                               int first_sliceno = 0);
+    splithist_t make_new_split(uint32_t dimno, OpId nodeid, splithist_t oldhist, int nslices, uint32_t slice_size,
+                               uint32_t first_sliceno = 0);
     SplitHistory get_splithist(splithist_t shist) const;
+    // Equivalent to get_splithist, but it only returns {orig_id, unique_id}
+    // instead of the full SplitHistory, and will be faster as a result.
+    std::pair<unsigned, unsigned> get_splithist_ids(splithist_t shist) const;
 
     // Return the main split record / slice number.
     // This differs from the values returned by splithist_t get_record() / get_sliceno() for extension records.
-    unsigned get_splithist_main_record(splithist_t const shist) const;
-    unsigned get_splithist_main_sliceno(splithist_t const shist) const;
+    unsigned get_splithist_main_record(splithist_t shist) const;
+    unsigned get_splithist_main_sliceno(splithist_t shist) const;
 
     // When two nodes containing splithist_t values 'a' and 'b' are combined
     // by CSE, this determines the splithist for the combined node.
-    splithist_t resolve(splithist_t a, splithist_t b, bool is_const) const
+    splithist_t resolve(splithist_t const a, splithist_t const b, const bool is_const) const
     {
         return ((a == b) || b.empty()) ? a : a.empty() ? b : resolve_func(a, b, is_const);
     }

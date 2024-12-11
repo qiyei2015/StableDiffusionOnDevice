@@ -354,7 +354,7 @@ template <typename Key, typename T, bool ERASE_OK, typename HSH = findhash<Key>>
 
     // data members
     size_t m_hashN; // size of the table (a power of 2)
-    int m_log2N; // log2(hashN)
+    unsigned int m_log2N; // log2(hashN)
     size_t m_entries; // number of used entries, plus deleted entries.
     // number of deleted entries: 'stuck_at_0' when !ERASE_OK.
     typename std::conditional<ERASE_OK, size_t, stuck_at_0<size_t>>::type m_deleted; // deleted entries (if ERASE_OK)
@@ -655,7 +655,7 @@ template <typename Key, typename T, bool ERASE_OK, typename HSH = findhash<Key>>
         }
     }
     // m_table assumed to be empty; resize it for 2^log2 entries
-    void make_new_table(int log2n)
+    void make_new_table(unsigned int log2n)
     {
         size_t const hn = size_t(1) << log2n;
         m_table.resize(hn);

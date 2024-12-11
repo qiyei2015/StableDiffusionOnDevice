@@ -31,7 +31,6 @@ class DeserTensorConn : public SerTensorConnDefs {
     typedef unsigned tensor_idx;
     typedef Tensor const *ptr_type;
 
-    tensor_idx previous_index = 0;
     // this collects all of the tensor_def we have seen. index is seq_index-1.
     std::vector<ptr_type> defined_tensors;
     // record of tensors ptrs we need to update after their definitions.
@@ -44,14 +43,15 @@ class DeserTensorConn : public SerTensorConnDefs {
   public:
     DeserTensorConn() {}
     // process a tensor definition
-    void tensor_def(Deserializer &, ptr_type);
+    void tensor_def(Deserz &, ptr_type);
     // process a tensor ref
-    void tensor_ref(Deserializer &, ptr_type &);
+    void tensor_ref(Deserz &, ptr_type &);
     // process n tensor refs.
-    void tensor_refs(Deserializer &, ptr_type *ptrs, unsigned num);
+    void tensor_refs(Deserz &, ptr_type *ptrs, unsigned num);
 
+    // TODO: remove these two, we don't use them, and should not.
     // read an identity (for use in subsequent need_fixup)
-    tensor_idx read_identity(Deserializer &);
+    tensor_idx read_identity(Deserz &);
     // apply the identity to 'fix' a tensor pointer (usually now, sometimes later
     void need_fixup(tensor_idx ident, ptr_type *dst);
 
@@ -60,7 +60,14 @@ class DeserTensorConn : public SerTensorConnDefs {
 
     inline bool has_pending_updates() { return (pending_tensor_updates.size() > 0); }
 
+    // 'reserve' the defined tensors to avoid allocation overhead...
     inline void reserve_tensors(const size_t n) { defined_tensors.reserve(n); }
+    // resize the 'defined tensors' table to its full capacity (specified).
+    // Used only in multi-thread deserialize, prior to deserializing the runlist.
+    inline void resize_tensordef_table(const size_t n) { defined_tensors.resize(n); }
+
+    // this is for use by 'reference fixup' code, in concurrent deserialize.
+    std::vector<ptr_type> const &get_defined_tensors() const { return defined_tensors; }
 
   protected:
     // insert a new update request into the structure.
@@ -70,9 +77,9 @@ class DeserTensorConn : public SerTensorConnDefs {
     // this is called when we've read a tensor index, and it looks like an update record;
     // this will process all update records and return the index we wanted, which followed
     // them all.
-    tensor_idx process_fwd_pending(Deserializer &, tensor_idx);
+    tensor_idx process_fwd_pending(Deserz &, tensor_idx);
 
-    tensor_idx read_identity_inline(Deserializer &);
+    tensor_idx read_identity_inline(Deserz &);
     void apply_fixup_inline(tensor_idx idx, ptr_type *dst);
 };
 

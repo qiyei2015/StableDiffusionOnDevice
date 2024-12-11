@@ -1,6 +1,6 @@
 //=============================================================================
 //
-//  Copyright (c) 2020-2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2020-2022, 2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -40,7 +40,7 @@ std::shared_ptr<Logger> Logger::createLogger(QnnLog_Callback_t callback,
 Logger::Logger(QnnLog_Callback_t callback, QnnLog_Level_t maxLevel, QnnLog_Error_t* status)
     : m_callback(callback), m_maxLevel(maxLevel), m_epoch(getTimestamp()) {
   if (!callback) {
-    m_callback = utils::logStdoutCallback;
+    m_callback = utils::logDefaultCallback;
   }
 }
 

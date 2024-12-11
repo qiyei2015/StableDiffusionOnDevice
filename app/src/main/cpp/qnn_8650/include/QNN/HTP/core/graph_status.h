@@ -54,9 +54,12 @@ struct GraphStatus {
         NotApplicable = 100, // used for internal signaling, should not be returned from API
         Yielding = 101,
         AbortSuccess = 102,
+        ErrorBadDynamicOp = 103,
         ErrorFatal = -1,
     };
 #ifdef __cplusplus
+    GraphStatus(const GraphStatus &) = default;
+    GraphStatus &operator=(const GraphStatus &) = default;
     GraphStatus(GraphErrorCode ec) : error_code(ec) {}
     explicit GraphStatus(int ec) : error_code(static_cast<GraphErrorCode>(ec)) {}
     int to_int() const { return static_cast<int>(error_code); }

@@ -1,6 +1,6 @@
 //=============================================================================
 //
-//  Copyright (c) 2022-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) 2022-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -24,9 +24,9 @@
 /// QNN LPAI interface provider
 #define QNN_LPAI_INTERFACE_PROVIDER_NAME "LPAI_QTI_AISW"
 
-/// QNN LPAI API Version values
+/// QNN LPAI API Version values for V4
 #define QNN_LPAI_API_VERSION_MAJOR 2
-#define QNN_LPAI_API_VERSION_MINOR 5
+#define QNN_LPAI_API_VERSION_MINOR 9
 #define QNN_LPAI_API_VERSION_PATCH 0
 
 // clang-format off

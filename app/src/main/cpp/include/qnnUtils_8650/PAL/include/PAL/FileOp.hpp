@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2008-2022 Qualcomm Technologies, Inc.
+// Copyright (c) 2008-2023 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -15,6 +15,7 @@
 
 #include <fcntl.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 

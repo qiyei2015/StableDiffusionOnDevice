@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2023 Qualcomm Technologies, Inc.
+// Copyright (c) 2023-2024 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <utility>
 #include <tuple>
+
+#include "executable.h"
 
 // Contains defs for host-side and target side, so try not
 // to add too many 'host only' things.
@@ -116,8 +118,25 @@ constexpr std::pair<unsigned, unsigned> chunk_preload_op_tgt_size_align()
 //
 constexpr std::pair<unsigned, unsigned> shape_tgt_size_align(unsigned rank)
 {
-    return {round_up(tgt_sizet_bytes * (1 + 2 * rank) + rank, tgt_sizet_bytes), tgt_sizet_bytes};
+    // tgt_sizet_bytes * (1 + 1 + 2 * rank) =
+    //      vtable ptr
+    //      shapeflag flags + padding[]
+    //      std::array<size_t, Rank> dims
+    //      std::array<size_t, Rank> max_dims
+    //  + rank = std::array<uint8_t, Rank> pad
+    return {round_up(tgt_sizet_bytes * (1 + 1 + 1 + 2 * rank) + rank, tgt_sizet_bytes), tgt_sizet_bytes};
 }
+
+//
+// {size_align} of DynamicShape<RANK> object
+//
+constexpr std::pair<unsigned, unsigned> dynamic_shape_tgt_size_align(const unsigned rank)
+{
+    // std::array<size_t, Rank> dims == tgt_sizet_bytes * rank
+    // (shapeflag flags + padding[]) + vtable ptr + dynamic_state =  (3 * tgt_sizet_bytes)
+    return {round_up(tgt_sizet_bytes * rank + (4 * tgt_sizet_bytes), tgt_sizet_bytes), tgt_sizet_bytes};
+}
+
 //
 // {size_align} of interface object (may or may not be quantized)
 //
@@ -132,7 +151,7 @@ constexpr std::pair<unsigned, unsigned> interface_tgt_size_align(bool is_quantiz
 //
 constexpr std::pair<unsigned, unsigned> tensor_general_tgt_size_align()
 {
-    return {tgt_sizet_bytes * 4, tgt_sizet_bytes};
+    return {tgt_sizet_bytes * 4 + 2 * tgt_ptr_bytes, tgt_sizet_bytes};
 }
 
 // 'shape' tensor, of given rank.
@@ -149,6 +168,17 @@ constexpr std::pair<unsigned, unsigned> tensor_scalar_tgt_size_align(bool is_qua
 {
     const unsigned ifc_size = interface_tgt_size_align(is_quantized).first;
     return {tgt_sizet_bytes * 2 + ifc_size, tgt_sizet_bytes};
+}
+// sizeof OpExtraInfo on target: {long long, 2 * unsigned, char *, 4 * padbyte}
+constexpr std::pair<unsigned, unsigned> OpExtraInfo_size_align = {24, 8};
+
+// The size of a SliceDispatchOp for the given number of slices.
+// Currently it's always the same regardless of 'nslices'; We may introduce 'right-sized'
+// value, in which case 'exact=true' will get the 'real' size; but exact = false will always
+// give the full size.
+constexpr std::pair<unsigned, unsigned> slice_dispatch_op_size_align(unsigned const nslices, bool const exact = false)
+{
+    return {tgt_sizet_bytes * ((op_has_graphp ? 5 : 4) + 3 * Executable::MAX_OP_SLICES), tgt_sizet_bytes};
 }
 
 // this is used in e.g.

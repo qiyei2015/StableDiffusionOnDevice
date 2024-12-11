@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2020 Qualcomm Technologies, Inc.
+// Copyright (c) 2020-2023 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -16,8 +16,9 @@
 // for HMX thread(s).
 enum OpStoreType {
     OpStoreFg,
-    OpStoreVec,
-    OpStoreMtx,
+    OpStoreVec, // HVX (vector)
+    OpStoreMtx, // HMX (matrix)
+    OpStoreElt, // HLX (element-wise long vector)
 };
 
 class Op;
@@ -26,6 +27,7 @@ namespace hnnx {
 
 class Serializer;
 class Deserializer;
+class Deserz;
 
 /**
  * @brief Common base to register error in Serialize/Deserialize
@@ -49,15 +51,22 @@ class DeSerError {
 
 // We allow 4 bits of extra flag storage when storing an Op type, using
 // the upper four bits of the index.
-enum {
-    SerializeOpFlagMask = 0xf0000000,
-    SerializeOpFlagShift = 28,
-};
+constexpr uint32_t SerializeOpFlagMask = 0xf0000000u;
+constexpr uint32_t SerializeOpFlagShift = 28u;
+
 void op_serialize_common(Serializer &sctx, Op const *op, std::type_info const *actual_type = nullptr);
 
 static constexpr unsigned OP_SEQNO_MARKER_XOR = 0x1303ee71u;
 static constexpr unsigned OP_SEQNO_MARKER_MASK = 0x1FFFFFFFu; // upper 3 bits reserved for flags.
 static constexpr unsigned OP_SEQNO_PRELOAD_FLAG = 0x80000000u;
+// if this bit is set in the sequence word, it means one or more 'extended addribute'
+// words follow.
+static constexpr unsigned OP_SEQNO_EXTATTR_FLAG = 0x40000000u;
+// The general format for 'extended attribute' word is;
+//  bits 30..24 tell you what it means, and
+//   bit 31 tells you it's not the last one.
+// The only defined one is '1' in bits 30..24, which means the following Op is 'self-slicing'
+static constexpr unsigned OP_EXTATTR_SELF_SLICING = 0x1; // 8 LSBs = # of slices (>=2)
 
 } // namespace hnnx
 

@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2019-2023 Qualcomm Technologies, Inc.
+// Copyright (c) 2019-2024 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -91,11 +91,13 @@ typedef struct {
  * @brief An enumeration of memory types which may be used to provide data for a QNN tensor.
  */
 typedef enum {
-  /// Memory allocated by ION manager. The ION allocator is only available on Android devices, so
-  /// ION memory can only be registered with Backend libraries built for Android.
+  /// Memory allocated by ION manager. ION memory can only be registered with Backend libraries
+  /// when a device supports ION manager.
   QNN_MEM_TYPE_ION = 1,
   /// Memory allocated by a custom backend mechanism.
   QNN_MEM_TYPE_CUSTOM = 2,
+  /// Memory allocated by DMA-BUF subsystem.
+  QNN_MEM_TYPE_DMA_BUF = 3,
   // Unused, present to ensure 32 bits.
   QNN_MEM_TYPE_UNDEFINED = 0x7FFFFFFF
 } Qnn_MemType_t;
@@ -119,6 +121,23 @@ typedef struct {
 typedef void* Qnn_MemInfoCustom_t;
 
 /**
+ * @brief a struct which includes DMA-BUF related information
+ */
+typedef struct {
+  /// file descriptor for memory, must be set to QNN_MEM_INVALID_FD if not applicable
+  int32_t fd;
+  /// data pointer, created by app, using mmap on above file descriptor.
+  void* data;
+} Qnn_MemDmaBufInfo_t;
+
+/// Qnn_MemDmaBufInfo_t initializer macro
+#define QNN_MEM_DMA_BUF_INFO_INIT \
+  {                               \
+    QNN_MEM_INVALID_FD, /*fd*/    \
+        NULL            /*data*/  \
+  }
+
+/**
  * @brief A struct which describes memory params
  */
 typedef struct {
@@ -132,6 +151,7 @@ typedef struct {
   union UNNAMED {
     Qnn_MemIonInfo_t ionInfo;
     Qnn_MemInfoCustom_t customInfo;
+    Qnn_MemDmaBufInfo_t dmaBufInfo;
   };
 } Qnn_MemDescriptor_t;
 

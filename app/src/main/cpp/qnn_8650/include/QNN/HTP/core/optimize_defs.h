@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2020-2022 Qualcomm Technologies, Inc.
+// Copyright (c) 2020-2023 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -53,10 +53,11 @@
         ROUNDUP(MIN(CHANNEL_SPLIT_SIZE, DIM_DEPTH(ACT)), 32))
 
 #define ELEMWISE_TOOBIG(A, B, OUT)                                                                                     \
-    GT(ADD(ELEMWISE_TILE_SIZE(A), ELEMWISE_TILE_SIZE(B), ELEMWISE_TILE_SIZE(OUT)), TCM_MAXTENSOR_SIZE)
+    OR(OPTION_BOOL("central_tiler"),                                                                                   \
+       GT(ADD(ELEMWISE_TILE_SIZE(A), ELEMWISE_TILE_SIZE(B), ELEMWISE_TILE_SIZE(OUT)), TCM_MAXTENSOR_SIZE))
 
 #define WEIGHT_STORAGE(WEIGHT, SPLIT)                                                                                  \
-    MUL(ELEMENTSIZE_OF(WEIGHT), DIM_FILTHEIGHT(WEIGHT), DIM_FILTWIDTH(WEIGHT), DIM_FILTDEPTH(WEIGHT),                  \
+    MUL(ELEMENTSIZE_OF(WEIGHT), DIM_FILTHEIGHT(WEIGHT), DIM_FILTWIDTH(WEIGHT), ROUNDUP(DIM_FILTDEPTH(WEIGHT), 32),     \
         MIN(SPLIT, DIM_NFILTS(WEIGHT)))
 
 #define ACT_STORAGE_EST(WEIGHT, ACT, SPLIT)                                                                            \
@@ -67,6 +68,10 @@
 #define GOOD_WEIGHTS(WEIGHT, ACT, SPLIT)                                                                               \
     LT(ADD(WEIGHT_STORAGE(WEIGHT, SPLIT), ACT_STORAGE_EST(WEIGHT, ACT, SPLIT)),                                        \
        SELECT(EQ(ELEMENTSIZE_OF(WEIGHT), 1), TCM_MAXTENSOR_HALF_SIZE, MUL(DIV(TCM_MAXTENSOR_SIZE, 2048), 1041)))
+
+#define GOOD_WEIGHTS_QUANT(WEIGHT, ACT, SPLIT)                                                                         \
+    LT(ADD(MUL(2, WEIGHT_STORAGE(WEIGHT, SPLIT)), ACT_STORAGE_EST(WEIGHT, ACT, SPLIT)),                                \
+       MUL(DIV(TCM_MAXTENSOR_SIZE, 2048), 1041))
 
 /* controls when we can be more aggressive with tiling */
 #define CAN_FINE_SPLIT EQ(OPTION_UINT("can_fine_split"), 1)
@@ -79,12 +84,21 @@
 #define AUTOTHREAD_ENABLED OPTION_INT("enable_autothread")
 
 // Helper to decide if we should auto thread
-#define SHOULD_AUTOTHREAD GT(DATA_SIZE("*"), MUL(OPTION_INT("autothread_size_kb"), 1024))
+#define SHOULD_AUTOTHREAD                                                                                              \
+    AND(NOT(OPTION_BOOL("central_tiler")), GT(DATA_SIZE("*"), MUL(OPTION_INT("autothread_size_kb"), 1024)))
+// When autothreading on width, beware of rounding based on element size
+#define SHOULD_AUTOTHREAD1(ACT1)       AND(SHOULD_AUTOTHREAD, EQ(ELEMENTSIZE_OF("*"), ELEMENTSIZE_OF(ACT1)))
+#define SHOULD_AUTOTHREAD2(ACT1, ACT2) AND(SHOULD_AUTOTHREAD1(ACT1), EQ(ELEMENTSIZE_OF("*"), ELEMENTSIZE_OF(ACT2)))
+#define SHOULD_AUTOTHREAD3(ACT1, ACT2, ACT3)                                                                           \
+    AND(SHOULD_AUTOTHREAD2(ACT1, ACT2), EQ(ELEMENTSIZE_OF("*"), ELEMENTSIZE_OF(ACT3)))
 
 // This is used for some unary operators so that they are supertiled the same way
 // as binary ops even though they have a smaller footprint
 // In particular Sqrt(Mul(x,y))...
-#define SHOULD_AUTOTHREAD_UNARY GT(MUL(3, DATA_SIZE("*")), MUL(OPTION_INT("autothread_size_kb"), 2 * 1024))
+#define SHOULD_AUTOTHREAD_UNARY                                                                                        \
+    AND(NOT(OPTION_BOOL("central_tiler")), GT(MUL(3, DATA_SIZE("*")), MUL(OPTION_INT("autothread_size_kb"), 2 * 1024)))
+// When autothreading on width, beware of rounding based on element size
+#define SHOULD_AUTOTHREAD_UNARY1(ACT) AND(SHOULD_AUTOTHREAD_UNARY, EQ(ELEMENTSIZE_OF("*"), ELEMENTSIZE_OF(ACT)))
 
 /*
  * "Choose the maximum channel split size that doesn't make the slice of weights too big"
@@ -94,6 +108,15 @@
            SELECT(GOOD_WEIGHTS(WEIGHT_STR, ACT_STR, DIV(CHANNEL_SPLIT_SIZE, 2)), DIV(CHANNEL_SPLIT_SIZE, 2),           \
                   SELECT(GOOD_WEIGHTS(WEIGHT_STR, ACT_STR, DIV(CHANNEL_SPLIT_SIZE, 4)), DIV(CHANNEL_SPLIT_SIZE, 4),    \
                          32)))
+
+/*
+ * "Choose the maximum channel split size that doesn't make the slice of weights too big"
+ */
+#define SMART_CHANNEL_SIZE_QUANT(WEIGHT_STR, ACT_STR)                                                                  \
+    SELECT(GOOD_WEIGHTS_QUANT(WEIGHT_STR, ACT_STR, CHANNEL_SPLIT_SIZE), CHANNEL_SPLIT_SIZE,                            \
+           SELECT(GOOD_WEIGHTS_QUANT(WEIGHT_STR, ACT_STR, DIV(CHANNEL_SPLIT_SIZE, 2)), DIV(CHANNEL_SPLIT_SIZE, 2),     \
+                  SELECT(GOOD_WEIGHTS_QUANT(WEIGHT_STR, ACT_STR, DIV(CHANNEL_SPLIT_SIZE, 4)),                          \
+                         DIV(CHANNEL_SPLIT_SIZE, 4), 32)))
 
 // For HMX DWC
 #define DWC_ACT_STORAGE_EST(WEIGHT, ACT, SPLIT)                                                                        \
@@ -123,10 +146,29 @@
 /// @brief SAME_DTYPE_QUANT("A", "B") -> true if the operands have the same dtype, stepsize and zero offset
 #define SAME_DTYPE_QUANT(OPA, OPB)                                                                                     \
     AND(EQ(DTYPE_OF(OPA), DTYPE_OF(OPB)), EQ(STEPSIZE_OF(OPA), STEPSIZE_OF(OPB)),                                      \
-        EQ(ZERO_OFFSET_OF(OPA), ZERO_OFFSET_OF(OPB)))
+        EQ(ZERO_OFFSET_OF(OPA), ZERO_OFFSET_OF(OPB)), NOT(OPTION_BOOL("quant_is_updateable")))
+
+/// @brief MIN_QU8(X) -> min of range defined by a scale/offset for a qu8 tensor
+#define MIN_QU8(X) MUL(STEPSIZE_OF(X), MUL(-1.0f, ZERO_OFFSET_OF(X)))
+
+/// @brief MAX_QU8(X) -> max of range defined by a scale/offset for a qu8 tensor
+#define MAX_QU8(X) MUL(STEPSIZE_OF(X), SUB(255.0f, ZERO_OFFSET_OF(X)))
 
 /// @brief OPCONST(X) enforces that op X is a Const during pattern matching
 #define OPCONST(X) LET(X, Op("$Const"))
+
+/// @brief OPCONST_DDR(X) enforces that op Name is a Const during pattern matching
+///   the "constant_crouton_from_ddr" is discarded in final cleanup and the
+///   constant is loaded from memory. It is used in contexts where crouton format
+///   is expected.
+#define OPCONST_DDR(Name)      Op("constant_crouton_from_ddr", Op("ForceFormat_Crouton", OPCONST(Name)))
+#define OPCONST_FLAT_DDR(Name) Op("constant_flat_from_ddr", OPCONST(Name))
+
+/// @brief OPCONST_DDR(X) enforces that op Name is a Const during pattern matching
+///   the "constant_crouton_to_vtcm" will be converted to a sequence to load
+///   the constant into TCM memory during final cloeanup
+#define OPCONST_TCM(Name)      Op("constant_crouton_to_vtcm", OPCONST(Name))
+#define OPCONST_FLAT_TCM(Name) Op("constant_flat_to_vtcm", OPCONST(Name))
 
 // How wide should the output tile be?
 // Well,
@@ -155,6 +197,14 @@
             ROUNDUP(ADD(MUL(DIM_WIDTH(ACT), ELEMENTSIZE_OF(ACT)), SELECT(EQ(DIM_FILTWIDTH(WEIGHTS), 1), 0, 8)), 8),    \
             ROUNDUP(DIM_DEPTH(ACT), 32)),                                                                              \
         ROUNDUP(WEIGHT_STORAGE(WEIGHTS, DIM_NFILTS(WEIGHTS)), 2048), ESTIMATE_TENSOR_SIZE(OUT),                        \
+        ROUNDUP(MUL(8, ROUNDUP(DIM_DEPTH(OUT), 32)), 2048))
+
+#define ESTIMATE_SIZE_QUANT(ACT, WEIGHTS, OUT)                                                                         \
+    ADD(MUL(DIM_BATCHES(ACT),                                                                                          \
+            ROUNDUP(ADD(DIM_HEIGHT(ACT), SELECT(EQ(DIM_FILTHEIGHT(WEIGHTS), 1), 0, 8)), TILE_HEIGHT),                  \
+            ROUNDUP(ADD(MUL(DIM_WIDTH(ACT), ELEMENTSIZE_OF(ACT)), SELECT(EQ(DIM_FILTWIDTH(WEIGHTS), 1), 0, 8)), 8),    \
+            ROUNDUP(DIM_DEPTH(ACT), 32)),                                                                              \
+        ROUNDUP(MUL(WEIGHT_STORAGE(WEIGHTS, DIM_NFILTS(WEIGHTS)), 2), 2048), ESTIMATE_TENSOR_SIZE(OUT),                \
         ROUNDUP(MUL(8, ROUNDUP(DIM_DEPTH(OUT), 32)), 2048))
 
 // minimum size required for convolution
@@ -189,6 +239,18 @@
                 MIN_WIDTH_OF(OUT_STR)),                                                                                \
         MIN_WIDTH_OF(OUT_STR))
 
+#define MAX_GOOD_WIDTH_CONV_QUANT(ACT_STR, WEIGHT_STR, OUT_STR, STRIDE, DILATION, TCMSIZE)                             \
+    MAX(ROUNDUP(DIV(SUBS(DIV(MUL(TCMSIZE, 7), 8),                                                                      \
+                         ADD(ROUNDUP(MUL(WEIGHT_STORAGE(WEIGHT_STR, DIM_NFILTS(WEIGHT_STR)), 2), 2048),                \
+                             MUL(ROUNDUP(DIM_HEIGHT(ACT_STR), 8), ROUNDUP(DIM_DEPTH(ACT_STR), 32),                     \
+                                 SUB(DIM_FILTWIDTH(WEIGHT_STR), 1), DILATION, ELEMENTSIZE_OF(ACT_STR)))),              \
+                    MUL(4, ADD(MUL(ELEMENTSIZE_OF(OUT_STR), ROUNDUP(DIM_DEPTH(OUT_STR), 32),                           \
+                                   ROUNDUP(DIM_HEIGHT(OUT_STR), 8)),                                                   \
+                               MUL(ELEMENTSIZE_OF(ACT_STR), ROUNDUP(DIM_HEIGHT(ACT_STR), 8), STRIDE,                   \
+                                   ROUNDUP(DIM_DEPTH(ACT_STR), 32))))),                                                \
+                MIN_WIDTH_OF(OUT_STR)),                                                                                \
+        MIN_WIDTH_OF(OUT_STR))
+
 #define MAX_GOOD_WIDTH(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE)                                                          \
     MAX_GOOD_WIDTH_CONV(ACT_STR, WEIGHT_STR, OUT_STR, 1, 1, TCMSIZE)
 
@@ -208,7 +270,9 @@
 // Default is 256; smaller tiles usually get better performance, and size 256 doesn't incur much overhead.
 // Also, for the activation, multiplying height by 2 (becase that's how it'll get tiled if "*" is tiled to TILE_HEIGHT)
 // and multiplying the whole thing by 2 (because whatever we tile "*" to, we tile ACT to 2x, due to stride).
-#define SMART_EARLY_WIDTH_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE)                                                    \
+//
+// Sometimes, we need to tile all the way down to 8; hence, we can specify whether to round to 16 or to 8
+#define SMART_EARLY_WIDTH_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE, ROUNDER)                                           \
     EVEN_TILE_UNDER_CUTOFF2_CUSTOM(                                                                                    \
             DIM_WIDTH(OUT_STR),                                                                                        \
             MIN(256, ROUNDUP(MAX(16, DIV(SUBS(DIV(MUL(TCMSIZE, 7), 16),                                                \
@@ -219,15 +283,13 @@
                                                  MUL(TILE_HEIGHT, 2), ROUNDUP(DIM_DEPTH(ACT_STR), 32)),                \
                                              MUL(ELEMENTSIZE_OF(OUT_STR), DIM_BATCHES(ACT_STR), TILE_HEIGHT,           \
                                                  MIN_CHANNEL_SPLIT_SIZE)))),                                           \
-                             16)),                                                                                     \
-            16)
+                             ROUNDER)),                                                                                \
+            ROUNDER)
 
-// If Estimated size is greater than TCM size, then tile to half of current width
-// Has to be rounded up to 8, because it must be a multiple of 8
-// Should not be tiled to width less than 8
-#define EARLY_HALF_WIDTH_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE)                                                     \
-    SELECT(GT(ESTIMATE_SIZE(ACT_STR, WEIGHT_STR, OUT_STR), TCMSIZE), MAX(8, ROUNDUP(DIV(DIM_WIDTH(OUT_STR), 2), 8)),   \
-           DIM_WIDTH(OUT_STR))
+#define SMART_EARLY_WIDTH_ADAPTIVE_ROUNDING_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE)                                  \
+    SELECT(AND(IS_QUINT8(WEIGHT_STR), IS_QUINT16(ACT_STR)),                                                            \
+           SMART_EARLY_WIDTH_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE, 8),                                             \
+           SMART_EARLY_WIDTH_S2(ACT_STR, WEIGHT_STR, OUT_STR, TCMSIZE, 16))
 
 #define FLAT_TENSOR_SIZE(T) MUL(ELEMENTSIZE_OF(T), DIM_BATCHES(T), DIM_HEIGHT(T), DIM_WIDTH(T), DIM_DEPTH(T))
 
@@ -317,8 +379,11 @@
 #define REARRANGE_TO_W1(OP) Op("space_rearrange", WITH_SIZE(SHAPE_FROM_W1("*"), WITH_TYPE("*", OP)))
 
 #define SHAPE_FROM_H1(A)                                                                                               \
-    gen_Shape(DIM_BATCHES(A), MIN(8, DIV(ADD(DIM_WIDTH(A), 7), 8)), MUL(DIV(ADD(DIM_WIDTH(A), 63), 64), 8),            \
-              DIM_DEPTH(A))
+    SELECT(IS_QUINT8(A),                                                                                               \
+           gen_Shape(DIM_BATCHES(A), MIN(8, DIV(ADD(DIM_WIDTH(A), 7), 8)), MUL(DIV(ADD(DIM_WIDTH(A), 63), 64), 8),     \
+                     DIM_DEPTH(A)),                                                                                    \
+           gen_Shape(DIM_BATCHES(A), MIN(8, DIV(ADD(DIM_WIDTH(A), 3), 4)), MUL(DIV(ADD(DIM_WIDTH(A), 31), 32), 4),     \
+                     DIM_DEPTH(A)))
 
 #define REARRANGE_FROM_H1(A) WITH_SIZE(SHAPE_FROM_H1(A), WITH_TYPE(A, Op("space_rearrange", A)))
 
@@ -369,5 +434,42 @@
 #define ACT_FUSION_MULTI_OUT_CHECK(OP)                                                                                 \
     OR(EXTERNAL_CONSTRAINT(has_only_one_consumer, OP), OPTION_BOOL("force_conv_fusion"),                               \
        AND(PRODUCER_FOR(OP, "*Output"), EXTERNAL_CONSTRAINT(has_n_consumers, OP, 2), PRODUCER_FOR("*", "*Output")))
+
+// For central tiler, just return true but for legacy evaluate the
+// conjunction of the arguments
+
+// This should be used to separate predicate into semantic and tiling preference options
+// where the tiling preferences (typically references to target TCM size) should be
+// wrappered in this macro.
+#define SHOULD_TILE(...) OR(OPTION_BOOL("central_tiler"), AND(__VA_ARGS__))
+
+// if u8, w>8 && w%8 == 0
+// if u16, w>4 && w%4 == 0, not fully utilizing the crouton, but still much better performance
+// TODO: Will remove the second rule once the space rearrange is fully implemented to reshape
+// the entire model from Input toward the output
+#define WIDTH_TO_HEIGHTX_CONSTRAINT(OPSTR)                                                                             \
+    OR(AND(GT(DIM_WIDTH(OPSTR), TILE_HEIGHT), EQ(REM(DIM_WIDTH(OPSTR), TILE_HEIGHT), 0)),                              \
+       AND(IS_QUINT16(OPSTR), GT(DIM_WIDTH(OPSTR), 4), EQ(REM(DIM_WIDTH(OPSTR), 4), 0)))
+
+#define HEIGHTX_SHAPE(OPSTR)                                                                                           \
+    SELECT(EQ(REM(DIM_WIDTH(OPSTR), TILE_HEIGHT), 0),                                                                  \
+           gen_Shape(DIM_BATCHES(OPSTR), MUL(DIM_HEIGHT(OPSTR), TILE_HEIGHT), DIV(DIM_WIDTH(OPSTR), TILE_HEIGHT),      \
+                     DIM_DEPTH(OPSTR)),                                                                                \
+           SELECT(EQ(REM(DIM_WIDTH(OPSTR), 4), 0),                                                                     \
+                  gen_Shape(DIM_BATCHES(OPSTR), MUL(DIM_HEIGHT(OPSTR), 4), DIV(DIM_WIDTH(OPSTR), 4),                   \
+                            DIM_DEPTH(OPSTR)),                                                                         \
+                  gen_Shape(DIM_BATCHES(OPSTR), DIM_HEIGHT(OPSTR), DIM_WIDTH(OPSTR), DIM_DEPTH(OPSTR))))
+
+#define HEIGHT84_SHAPE(OPSTR)                                                                                          \
+    SELECT(EQ(REM(DIM_WIDTH(OPSTR), TILE_HEIGHT), 0),                                                                  \
+           gen_Shape(DIM_BATCHES(OPSTR), TILE_HEIGHT, DIV(DIM_WIDTH(OPSTR), TILE_HEIGHT), DIM_DEPTH(OPSTR)),           \
+           gen_Shape(DIM_BATCHES(OPSTR), 4, DIV(DIM_WIDTH(OPSTR), 4), DIM_DEPTH(OPSTR)))
+
+// Only perform reshape from height to width when the height is huge
+#define HEIGHT_TO_WIDTH_SHAPE(OPSTR)                                                                                   \
+    gen_Shape(DIM_BATCHES(OPSTR), TILE_HEIGHT, DIV(DIM_HEIGHT(OPSTR), TILE_HEIGHT), DIM_DEPTH(OPSTR))
+#define HEIGHT_TO_WIDTH_CONSTRAINT(OPSTR)                                                                              \
+    AND(GE(DIM_HEIGHT(OPSTR), 8192), EQ(REM(DIM_HEIGHT(OPSTR), TILE_HEIGHT), 0), EQ(DIM_WIDTH(OPSTR), 1),              \
+        EQ(REM(DIM_DEPTH(OPSTR), 32), 0))
 
 #endif

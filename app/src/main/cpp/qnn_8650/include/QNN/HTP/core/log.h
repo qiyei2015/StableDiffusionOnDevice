@@ -1,6 +1,6 @@
 //==============================================================================
 //
-// Copyright (c) 2020 Qualcomm Technologies, Inc.
+// Copyright (c) 2023 Qualcomm Technologies, Inc.
 // All Rights Reserved.
 // Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -12,13 +12,22 @@
 #include "weak_linkage.h"
 #include "macros_attribute.h"
 #include <cstdarg>
+#include <string>
+#include <chrono>
 
 #if !defined(__PRETTY_FUNCTION__) && !defined(__GNUC__)
-#define __PRETTY_FUNCTION__ __FUNCSIG__
+#define __FUNC_INFO__ __FUNCSIG__
+#else
+#define __FUNC_INFO__ __PRETTY_FUNCTION__
 #endif
 
-#define STRINGIZE_DETAIL(X) #X
-#define STRINGIZE(X)        STRINGIZE_DETAIL(X)
+// GCC and Clang define a preprocessor macro which is just the basename of the current file.
+#if defined(__FILE_NAME__)
+#define FILE_BASENAME __FILE_NAME__
+#else
+
+// MSVC doesn't have this nice feature, so we have to do it manually.  Note that the entire path
+// still ends up in the .rodata section, unfortunately.
 
 // Constexpr that will strip the path off of the file for logging purposes
 #ifdef __cplusplus
@@ -35,6 +44,13 @@ constexpr
     }
     return file;
 }
+
+#define FILE_BASENAME stripFilePath(__FILE__)
+
+#endif
+
+#define STRINGIZE_DETAIL(X) #X
+#define STRINGIZE(X)        STRINGIZE_DETAIL(X)
 
 #include "graph_status.h"
 #include "cc_pp.h"
@@ -78,10 +94,15 @@ typedef void (*DspLogCallbackFunc)(int level, const char *fmt, va_list args);
 // Dynamically set the logging priority level.
 PUSH_VISIBILITY(default)
 EXTERN_C_BEGIN
-void SetLogPriorityLevel(int level);
-int GetLogPriorityLevel();
-void SetLogCallbackFunc(DspLogCallbackFunc fn);
-DspLogCallbackFunc GetLogCallbackFunc();
+extern "C" {
+API_FUNC_EXPORT void SetLogPriorityLevel(int level);
+API_FUNC_EXPORT int GetLogPriorityLevel();
+API_FUNC_EXPORT void SetLogCallbackFunc(DspLogCallbackFunc fn);
+API_FUNC_EXPORT DspLogCallbackFunc GetLogCallbackFunc();
+
+// This prevents preemption if we're using the TID preemption mechanism.
+API_FUNC_EXPORT void nn_log_printf(const char *fmt, ...);
+}
 EXTERN_C_END
 POP_VISIBILITY()
 
@@ -91,7 +112,6 @@ extern "C" {
 
 // special log message for x86 that will log regardless logging level
 void qnndsp_x86_log(const char *fmt, ...);
-void progress_log(const char *info);
 
 #ifdef __cplusplus
 }
@@ -103,25 +123,23 @@ void progress_log(const char *info);
 PUSH_VISIBILITY(default)
 #include "weak_linkage.h"
 
-API_C_FUNC void API_FUNC_NAME(SetLogCallback)(DspLogCallbackFunc cbFn, int logPriority);
+API_FUNC_EXPORT API_C_FUNC void API_FUNC_NAME(SetLogCallback)(DspLogCallbackFunc cbFn, int logPriority);
 
 extern "C" {
-void qnndsp_log(int prio, const char *FMT, ...);
+API_FUNC_EXPORT void qnndsp_log(int prio, const char *FMT, ...);
 
-API_EXPORT void hv3_load_log_functions(decltype(SetLogCallback) **SetLogCallback_f);
+API_FUNC_EXPORT void hv3_load_log_functions(decltype(SetLogCallback) **SetLogCallback_f);
 }
 POP_VISIBILITY()
 
 #define qnndsp_base_log(prio, cformat, ...) (void)(qnndsp_log(prio, cformat, ##__VA_ARGS__))
 
-#define rawlog(cformat, ...) (qnndsp_base_log(NN_LOG_VERBOSELVL, cformat, ##__VA_ARGS__), GraphStatus::ErrorFatal)
+#define rawlog(cformat, ...) (qnndsp_base_log(NN_LOG_ERRORLVL, cformat, ##__VA_ARGS__), GraphStatus::ErrorFatal)
 #define okaylog(cformat, ...)                                                                                          \
-    (qnndsp_base_log(NN_LOG_ERRORLVL, "%s:" STRINGIZE(__LINE__) ":" cformat "\n", stripFilePath(__FILE__),             \
-                     ##__VA_ARGS__),                                                                                   \
+    (qnndsp_base_log(NN_LOG_ERRORLVL, "%s:" STRINGIZE(__LINE__) ":" cformat "\n", FILE_BASENAME, ##__VA_ARGS__),       \
      GraphStatus::ErrorFatal)
 #define errlog(cformat, ...)                                                                                           \
-    (qnndsp_base_log(NN_LOG_ERRORLVL, "%s:" STRINGIZE(__LINE__) ":ERROR:" cformat "\n", stripFilePath(__FILE__),       \
-                     ##__VA_ARGS__),                                                                                   \
+    (qnndsp_base_log(NN_LOG_ERRORLVL, "%s:" STRINGIZE(__LINE__) ":ERROR:" cformat "\n", FILE_BASENAME, ##__VA_ARGS__), \
      GraphStatus::ErrorFatal)
 #define warnlog(cformat, ...)        qnndsp_base_log(NN_LOG_WARNLVL, "WARNING: " cformat "\n", ##__VA_ARGS__)
 #define statlog(statname, statvalue) qnndsp_base_log(NN_LOG_STATLVL, "STAT: %s=%lld\n", statname, (long long)statvalue)
@@ -135,18 +153,17 @@ POP_VISIBILITY()
 #define verboselog(cformat, ...)        qnndsp_base_log(NN_LOG_VERBOSELVL, cformat "\n", ##__VA_ARGS__)
 #define logmsgraw(prio, cformat, ...)   (void)(qnndsp_base_log(prio, cformat, ##__VA_ARGS__))
 #define logmsg(prio, cformat, ...)                                                                                     \
-    (void)(qnndsp_base_log(prio, "%s:" STRINGIZE(__LINE__) ":" cformat "\n", stripFilePath(__FILE__), ##__VA_ARGS__))
+    (void)(qnndsp_base_log(prio, "%s:" STRINGIZE(__LINE__) ":" cformat "\n", FILE_BASENAME, ##__VA_ARGS__))
 #define logmsgl(prio, cformat, ...) (void)(qnndsp_base_log(prio, cformat, ##__VA_ARGS__))
 
 #else //Hexagon default log
-#define rawlog(FMT, ...) (printf(FMT, ##__VA_ARGS__), fflush(stdout), GraphStatus::ErrorFatal)
+
+#define rawlog(FMT, ...) (nn_log_printf((FMT), ##__VA_ARGS__), GraphStatus::ErrorFatal)
 #define okaylog(FMT, ...)                                                                                              \
-    (printf("%s:" STRINGIZE(__LINE__) ":" FMT "\n", stripFilePath(__FILE__), ##__VA_ARGS__), fflush(stdout),           \
-     GraphStatus::ErrorFatal)
+    (nn_log_printf("%s:" STRINGIZE(__LINE__) ":" FMT "\n", FILE_BASENAME, ##__VA_ARGS__), GraphStatus::ErrorFatal)
 #define errlog(FMT, ...)                                                                                               \
-    (printf("%s:" STRINGIZE(__LINE__) ":ERROR:" FMT "\n", stripFilePath(__FILE__), ##__VA_ARGS__), fflush(stdout),     \
-     GraphStatus::ErrorFatal)
-#define errlogl(FMT, ...) (printf(FMT, ##__VA_ARGS__), GraphStatus::ErrorFatal)
+    (nn_log_printf("%s:" STRINGIZE(__LINE__) ":ERROR:" FMT "\n", FILE_BASENAME, ##__VA_ARGS__), GraphStatus::ErrorFatal)
+#define errlogl(FMT, ...) (nn_log_printf((FMT), ##__VA_ARGS__), GraphStatus::ErrorFatal)
 #if defined(NN_LOG_DYNLVL) && (NN_LOG_DYNLVL > 0)
 #define logmsgraw(PRIO, FMT, ...)                                                                                      \
     (void)({                                                                                                           \
@@ -161,17 +178,25 @@ POP_VISIBILITY()
         if (PRIO <= GetLogPriorityLevel()) errlogl(FMT, ##__VA_ARGS__);                                                \
     })
 #elif defined(NN_LOG_MAXLVL)
+#ifdef __cplusplus
+constexpr
+#endif
+        static bool
+        log_condition(const int prio)
+{
+    return ((prio <= NN_LOG_MAXLVL) ? true : false);
+};
 #define logmsgraw(PRIO, FMT, ...)                                                                                      \
     (void)({                                                                                                           \
-        if (PRIO <= NN_LOG_MAXLVL) rawlog(FMT, ##__VA_ARGS__);                                                         \
+        if (log_condition(PRIO)) rawlog(FMT, ##__VA_ARGS__);                                                           \
     })
 #define logmsg(PRIO, FMT, ...)                                                                                         \
     (void)({                                                                                                           \
-        if (PRIO <= NN_LOG_MAXLVL) okaylog(FMT, ##__VA_ARGS__);                                                        \
+        if (log_condition(PRIO)) okaylog(FMT, ##__VA_ARGS__);                                                          \
     })
 #define logmsgl(PRIO, FMT, ...)                                                                                        \
     (void)({                                                                                                           \
-        if (PRIO <= NN_LOG_MAXLVL) errlogl(FMT, ##__VA_ARGS__);                                                        \
+        if (log_condition(PRIO)) errlogl(FMT, ##__VA_ARGS__);                                                          \
     })
 #else
 #define logmsgraw(PRIO, FMT, ...) (void)(rawlog(FMT, ##__VA_ARGS__))
@@ -202,4 +227,37 @@ POP_VISIBILITY()
 #define LOG_VERBOSE() (1)
 #endif //#ifdef NN_LOG_MAXLVL
 
-#endif
+class ExternalProgressLogger {
+
+  public:
+    static void start(const char *stage_name);
+
+    static void update_progress(unsigned int numerator, unsigned int denominator);
+
+    static void end(const char *stage_name, const char *duration);
+};
+
+class ExternalTimePoint {
+    using TimePoint = std::chrono::high_resolution_clock::time_point;
+    const std::string stage_name;
+    const TimePoint start_time;
+    unsigned int numerator = 1;
+    unsigned int denominator = 1;
+    bool done = false;
+
+  public:
+    explicit ExternalTimePoint(const std::string &&stage_name);
+
+    void update_progress(unsigned int new_numerator, unsigned int new_denominator);
+
+    void close();
+
+    // Custom destructor
+    ExternalTimePoint() = delete;
+    ExternalTimePoint(const ExternalTimePoint &) = delete;
+    ExternalTimePoint &operator=(ExternalTimePoint &t) = delete;
+    ExternalTimePoint(ExternalTimePoint &&) = delete;
+    ExternalTimePoint &operator=(ExternalTimePoint &&t) = delete;
+    ~ExternalTimePoint() { close(); }
+};
+#endif //#ifndef LOG_H

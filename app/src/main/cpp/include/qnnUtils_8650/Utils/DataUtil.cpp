@@ -1,6 +1,6 @@
 //==============================================================================
 //
-//  Copyright (c) 2019-2022 Qualcomm Technologies, Inc.
+//  Copyright (c) 2019-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -13,9 +13,11 @@
 
 #include "DataUtil.hpp"
 #include "Logger.hpp"
+#ifndef __hexagon__
 #include "PAL/Directory.hpp"
 #include "PAL/FileOp.hpp"
 #include "PAL/Path.hpp"
+#endif
 
 using namespace qnn;
 using namespace qnn::tools;
@@ -88,57 +90,68 @@ datautil::StatusCode datautil::readDataFromFile(std::string filePath,
   return StatusCode::SUCCESS;
 }
 
-datautil::ReadBatchDataRetType_t datautil::readBatchDataAndUpdateQueue(
-    std::queue<std::string>& filePaths,
-    std::vector<size_t> dims,
-    Qnn_DataType_t dataType,
-    uint8_t* buffer) {
+datautil::ReadBatchDataRetType_t datautil::readBatchData(const std::vector<std::string>& filePaths,
+                                                         const size_t filePathsIndexOffset,
+                                                         const bool loopBackToStart,
+                                                         const std::vector<size_t>& dims,
+                                                         const Qnn_DataType_t dataType,
+                                                         uint8_t* buffer) {
   if (nullptr == buffer) {
     QNN_ERROR("buffer is nullptr");
     return std::make_tuple(StatusCode::INVALID_BUFFER, 0, 0);
   }
   StatusCode err{StatusCode::SUCCESS};
-  size_t l{0};
-  std::tie(err, l) = datautil::calculateLength(dims, dataType);
+  size_t tensorLength{0};
+  std::tie(err, tensorLength) = datautil::calculateLength(dims, dataType);
   if (StatusCode::SUCCESS != err) {
     return std::make_tuple(err, 0, 0);
   }
   size_t numInputsCopied = 0;
   size_t numBatchSize    = 0;
   size_t totalLength     = 0;
-  do {
-    if (filePaths.empty()) {
-      numBatchSize += (l - totalLength) / (totalLength / numBatchSize);
-      // pad the vector with zeros
-      memset(buffer + totalLength, 0, (l - totalLength) * sizeof(char));
-      totalLength = l;
-    } else {
-      std::ifstream in(filePaths.front(), std::ifstream::binary);
-      if (!in) {
-        QNN_ERROR("Failed to open input file: %s", filePaths.front().c_str());
-        return std::make_tuple(StatusCode::FILE_OPEN_FAIL, numInputsCopied, numBatchSize);
+  size_t fileIndex       = filePathsIndexOffset;
+  while (true) {
+    if (fileIndex >= filePaths.size()) {
+      if (loopBackToStart) {
+        fileIndex = fileIndex % filePaths.size();
+      } else {
+        numBatchSize += (tensorLength - totalLength) / (totalLength / numBatchSize);
+        // pad the vector with zeros
+        memset(buffer + totalLength, 0, (tensorLength - totalLength) * sizeof(char));
+        break;
       }
-      in.seekg(0, in.end);
-      const size_t length = in.tellg();
-      in.seekg(0, in.beg);
-      if ((l % length) != 0 || length > l || length == 0) {
-        QNN_ERROR("Input file %s: file size in bytes (%d), should be multiples of: %d",
-                  filePaths.front().c_str(),
-                  length,
-                  l);
-        return std::make_tuple(StatusCode::DATA_SIZE_MISMATCH, numInputsCopied, numBatchSize);
-      }
-      if (!in.read(reinterpret_cast<char*>(buffer + (numInputsCopied * length)), length)) {
-        QNN_ERROR("Failed to read the contents of: %s", filePaths.front().c_str());
-        return std::make_tuple(StatusCode::DATA_READ_FAIL, numInputsCopied, numBatchSize);
-      }
-      QNN_VERBOSE("Return from readDataFromFile()");
-      totalLength += length;
-      numInputsCopied += 1;
-      numBatchSize += 1;
-      filePaths.pop();
     }
-  } while (totalLength < l);
+    std::ifstream in(filePaths[fileIndex], std::ifstream::binary);
+    if (!in) {
+      QNN_ERROR("Failed to open input file: %s", (filePaths[fileIndex]).c_str());
+      return std::make_tuple(StatusCode::FILE_OPEN_FAIL, numInputsCopied, numBatchSize);
+    }
+    in.seekg(0, in.end);
+    const size_t fileSize = in.tellg();
+    in.seekg(0, in.beg);
+    if ((tensorLength % fileSize) != 0 || fileSize > tensorLength || fileSize == 0) {
+      QNN_ERROR(
+          "Given input file %s with file size in bytes %d. If the model expects a batch size of "
+          "one, the file size should match the tensor extent: %d bytes. If the model expects a "
+          "batch size > 1, the file size should evenly divide the tensor extent: %d bytes.",
+          filePaths[fileIndex].c_str(),
+          fileSize,
+          tensorLength,
+          tensorLength);
+      return std::make_tuple(StatusCode::DATA_SIZE_MISMATCH, numInputsCopied, numBatchSize);
+    }
+    if (!in.read(reinterpret_cast<char*>(buffer + (numInputsCopied * fileSize)), fileSize)) {
+      QNN_ERROR("Failed to read the contents of: %s", filePaths.front().c_str());
+      return std::make_tuple(StatusCode::DATA_READ_FAIL, numInputsCopied, numBatchSize);
+    }
+    totalLength += fileSize;
+    numInputsCopied += 1;
+    numBatchSize += 1;
+    fileIndex += 1;
+    if (totalLength >= tensorLength) {
+      break;
+    }
+  }
   return std::make_tuple(StatusCode::SUCCESS, numInputsCopied, numBatchSize);
 }
 
@@ -173,6 +186,7 @@ datautil::StatusCode datautil::readBinaryFromFile(std::string filePath,
   return StatusCode::SUCCESS;
 }
 
+#ifndef __hexagon__
 datautil::StatusCode datautil::writeDataToFile(std::string fileDir,
                                                std::string fileName,
                                                std::vector<size_t> dims,
@@ -262,6 +276,7 @@ datautil::StatusCode datautil::writeBinaryToFile(std::string fileDir,
   os.write(reinterpret_cast<char*>(buffer), bufferSize);
   return StatusCode::SUCCESS;
 }
+#endif
 
 template <typename T_QuantType>
 datautil::StatusCode datautil::floatToTfN(

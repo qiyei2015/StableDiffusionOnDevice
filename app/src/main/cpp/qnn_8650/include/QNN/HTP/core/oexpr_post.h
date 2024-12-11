@@ -20,6 +20,7 @@
 
 #include "weak_linkage.h"
 #include "macros_attribute.h"
+#ifndef PREPARE_DISABLED
 PUSH_VISIBILITY(default)
 
 namespace oExp {
@@ -42,10 +43,10 @@ class opdef_accessor {
 
     API_EXPORT static OpRef get_input_of(ECtx &e, OpDef const *, int idx);
     API_EXPORT static OpRef get_output_of(ECtx &e, OpRef, int idx);
-    template <typename T> static T get_option(ECtx &e, hnnx::opname_tag_parm_t name);
+    template <typename T> API_EXPORT static T get_option(ECtx &e, hnnx::opname_tag_parm_t name);
     static void show_debug_message(ECtx &e, char const *why, char const *str)
     {
-        if constexpr (build_options::WithDebugOpt)
+        if constexpr (build_options::DefOptLog)
             const_cast<constraint_lib::Constraint &>(e).show_debug_message(why, str);
     }
 };
@@ -929,9 +930,9 @@ template <typename OPEX> struct expr<Variant::producer_for, OPEX> : private opde
     inline bool eval(ECtx &e) const
     {
         std::string prefix_consumer_opname;
-        hnnx::get_opname_with_pkg_prefix(prefix_consumer_opname, m_consumer_opname.c_str());
+        const char *const opname = hnnx::get_opname_with_pkg_prefix(prefix_consumer_opname, m_consumer_opname.c_str());
         OpDef const &prod_opdef = get_opdef_oexpr<OPEX>(e, m_prod_opexpr);
-        return hnnx::producer_for_impl(prod_opdef, prefix_consumer_opname);
+        return hnnx::producer_for_impl(prod_opdef, opname);
     }
     expr(OPEX const &prod_opexpr, char const *consumer_opname)
         : m_consumer_opname(consumer_opname), m_prod_opexpr(prod_opexpr)
@@ -953,9 +954,9 @@ template <typename OPEX> struct expr<Variant::eq_opstr, OPEX> : private opdef_ac
     {
         // TODO -- can this be moved to the constructor?
         std::string prefix_opname;
-        hnnx::get_opname_with_pkg_prefix(prefix_opname, m_opname.c_str());
+        const char *opname = hnnx::get_opname_with_pkg_prefix(prefix_opname, m_opname.c_str());
         OpDef const &opdef = get_opdef_oexpr<OPEX>(e, m_opexpr);
-        return opdef.opstr == prefix_opname;
+        return opdef.opstr == opname;
     }
     expr(OPEX const &op_opexpr, char const *opname) : m_opname(opname), m_opexpr(op_opexpr) {}
 };
@@ -965,6 +966,14 @@ template <typename OPEX> auto IS_OP(OPEX &&op, char const *opname)
 {
     auto op_wrapped = wrap_opexpr(std::forward<OPEX>(op));
     return expr<Variant::eq_opstr, decltype(op_wrapped)>(op_wrapped, opname);
+}
+
+//! IS_DTYPE_ALL(Dtype, "operand", ...) -> bool (true if all operands are Dtype)
+template <typename Tdtype, typename Ta, typename... Ts>
+inline constexpr auto IS_DTYPE_ALL(Tdtype &&dtype, Ta &&a, Ts &&...ts)
+{
+    return AND(EQ(DTYPE_OF(std::forward<Ta>(a)), std::forward<Tdtype>(dtype)),
+               IS_DTYPE_ALL(std::forward<Tdtype>(dtype), std::forward<Ts>(ts))...);
 }
 } // namespace oExp
 
@@ -995,6 +1004,7 @@ using oExp::INT, oExp::UINT, oExp::FLOAT, oExp::DTYPE; // 'cast' operators
 using oExp::CONSTVAL_FLOAT, oExp::CONSTVAL_FLOAT_VALID;
 using oExp::CONSTVAL_INT, oExp::CONSTVAL_INT_VALID;
 
+using oExp::IS_DTYPE_ALL;
 using oExp::IS_OP;
 using oExp::OPTION_INT, oExp::OPTION_UINT, oExp::OPTION_FLOAT, oExp::OPTION_BOOL;
 using oExp::PRODUCER_FOR;
@@ -1010,6 +1020,13 @@ static constexpr float INF = std::numeric_limits<float>::infinity();
 /// \ingroupOptConstraint
 /// @brief  NEG_INF: use for -inf in constraints and replacement rules.
 static constexpr float NEG_INF = -std::numeric_limits<float>::infinity();
+
+/// \ingroupOptConstraint
+/// @brief  INF: use for inf in constraints and replacement rules.
+static constexpr float INF_INT = std::numeric_limits<int32_t>::infinity();
+/// \ingroupOptConstraint
+/// @brief  NEG_INF: use for -inf in constraints and replacement rules.
+static constexpr float NEG_INF_INT = -std::numeric_limits<int32_t>::infinity();
 } // namespace oExp_for_cst
 
 namespace oExp_for_repl {
@@ -1033,4 +1050,5 @@ template <typename OPER> inline auto ITER_INPUT_OF(OPER &&oper, hnnx::split_cont
 
 POP_VISIBILITY()
 
+#endif /* !PREPARE_DISABLED */
 #endif /* OEXPR_POST_H_ */

@@ -12,9 +12,15 @@
 #include <stdint.h>
 #include "weak_linkage.h"
 
+PUSH_VISIBILITY(default)
+
 typedef int NN_INT32_T;
 
 typedef unsigned int NN_UINT32_T;
+
+typedef int64_t NN_INT64_T;
+
+typedef uint64_t NN_UINT64_T;
 
 #ifdef __cplusplus
 enum class DType : uint32_t {
@@ -30,6 +36,7 @@ enum DType {
     QInt32 = 6,
     QInt8 = 7,
     Float16 = 8,
+    Int64 = 9,
     ZZ_LAST_DTYPE,
     None = 254, //  for output of OpDef representing null output. Not for use by external API.
     Multi = 255 //  for output of OpDef representing multiple outputs. Not for use by external API.
@@ -37,7 +44,7 @@ enum DType {
 
 #define DTYPE_NAMETABLE_INIT                                                                                           \
     {                                                                                                                  \
-        "UNKNOWN", "QUInt8", "QUInt16", "QInt16", "Float32", "Int32", "QInt32", "QInt8", "Float16"                     \
+        "UNKNOWN", "QUInt8", "QUInt16", "QInt16", "Float32", "Int32", "QInt32", "QInt8", "Float16", "Int64"            \
     }
 
 #ifdef __cplusplus
@@ -57,7 +64,7 @@ inline char const *DType_name_inline(DType d)
     case DType::UNKNOWN:
         return "UNKNOWN";
     case DType::QUInt8:
-        return "QUint8";
+        return "QUInt8";
     case DType::QUInt16:
         return "QUInt16";
     case DType::QInt16:
@@ -68,6 +75,8 @@ inline char const *DType_name_inline(DType d)
         return "Float32";
     case DType::Int32:
         return "Int32";
+    case DType::Int64:
+        return "Int64";
     case DType::QInt32:
         return "QInt32";
     case DType::QInt8:
@@ -79,5 +88,7 @@ inline char const *DType_name_inline(DType d)
 
 } // namespace hnnx
 #endif
+
+POP_VISIBILITY()
 
 #endif

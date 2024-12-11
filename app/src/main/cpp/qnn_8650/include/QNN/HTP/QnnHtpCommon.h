@@ -1,6 +1,6 @@
 //=============================================================================
 //
-//  Copyright (c) 2022-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -26,7 +26,7 @@
 
 // HTP API Version values
 #define QNN_HTP_API_VERSION_MAJOR 5
-#define QNN_HTP_API_VERSION_MINOR 14
+#define QNN_HTP_API_VERSION_MINOR 26
 #define QNN_HTP_API_VERSION_PATCH 0
 
 // clang-format off
@@ -50,7 +50,7 @@
 
 // DSP Context blob Version values
 #define QNN_HTP_CONTEXT_BLOB_VERSION_MAJOR 3
-#define QNN_HTP_CONTEXT_BLOB_VERSION_MINOR 0
+#define QNN_HTP_CONTEXT_BLOB_VERSION_MINOR 2
 #define QNN_HTP_CONTEXT_BLOB_VERSION_PATCH 0
 
 /* ==== CDSP Security Library Versioning ==== */
@@ -78,6 +78,10 @@
 #define QNN_HTP_V75_NATIVE_LIB_SECURITY_VERSION_MAJOR 1
 #define QNN_HTP_V75_NATIVE_LIB_SECURITY_VERSION_MINOR 0
 #define QNN_HTP_V75_NATIVE_LIB_SECURITY_VERSION_PATCH 0
+
+
+
+
 
 
 #endif  // QNN_HTP_COMMON_H

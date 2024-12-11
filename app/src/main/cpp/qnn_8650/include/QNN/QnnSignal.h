@@ -1,6 +1,6 @@
 //=============================================================================
 //
-//  Copyright (c) 2020-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) 2020-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -43,11 +43,11 @@ typedef enum {
   QNN_SIGNAL_NO_ERROR = QNN_SUCCESS,
   /// Backend does not support the requested functionality
   QNN_SIGNAL_ERROR_UNSUPPORTED = QNN_COMMON_ERROR_NOT_SUPPORTED,
-  /// Returned when a signal object which is in-use is supplied to a second
-  /// QNN function call, or when an attempt is made to reconfigure or free such a signal object.
+  /// Attempt to reconfigure, free, or supply to a second QNN function call
+  /// a signal object that is already in use.
   QNN_SIGNAL_ERROR_SIGNAL_IN_USE = QNN_MIN_ERROR_SIGNAL + 0,
-  /// Returned when the signal object is idle and not being used by an outstanding
-  /// function call.
+  /// Signal object is idle and not being used by an outstanding function
+  /// call.
   QNN_SIGNAL_ERROR_SIGNAL_IDLE = QNN_MIN_ERROR_SIGNAL + 1,
   /// Invalid configuration error
   QNN_SIGNAL_ERROR_INVALID_ARGUMENT = QNN_MIN_ERROR_SIGNAL + 2,
@@ -55,7 +55,7 @@ typedef enum {
   QNN_SIGNAL_ERROR_INVALID_HANDLE = QNN_MIN_ERROR_SIGNAL + 3,
   /// Timeout error
   QNN_SIGNAL_ERROR_TIMEOUT = QNN_MIN_ERROR_SIGNAL + 4,
-  /// Returns when an API is supplied with incompatible signal type
+  /// API supplied with incompatible signal type
   QNN_SIGNAL_ERROR_INCOMPATIBLE_SIGNAL_TYPE = QNN_MIN_ERROR_SIGNAL + 5,
   // Mem allocation error
   QNN_SIGNAL_ERROR_MEM_ALLOC = QNN_COMMON_ERROR_MEM_ALLOC,
@@ -141,6 +141,8 @@ typedef struct {
  *         - QNN_SIGNAL_ERROR_INVALID_ARGUMENT: at least one argument or config option invalid
  *         - QNN_SIGNAL_ERROR_INVALID_HANDLE: _backend_ is not a valid handle
  *         - QNN_SIGNAL_ERROR_UNSUPPORTED: if QnnSignal API is not supported on the backend
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION: SSR occurence (successful recovery)
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION_FATAL: SSR occurence (unsuccessful recovery)
  */
 QNN_API
 Qnn_ErrorHandle_t QnnSignal_create(Qnn_BackendHandle_t backend,
@@ -188,6 +190,8 @@ Qnn_ErrorHandle_t QnnSignal_setConfig(Qnn_SignalHandle_t signal, const QnnSignal
  *         - QNN_SIGNAL_ERROR_TRIGGER_SIGNAL_IDLE: if the signal is not currently in-use, and hence
  *           can not be triggered.
  *         - QNN_SIGNAL_ERROR_UNSUPPORTED: if QnnSignal API is not supported on the backend
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION: SSR occurence (successful recovery)
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION_FATAL: SSR occurence (unsuccessful recovery)
  */
 QNN_API
 Qnn_ErrorHandle_t QnnSignal_trigger(Qnn_SignalHandle_t signal);

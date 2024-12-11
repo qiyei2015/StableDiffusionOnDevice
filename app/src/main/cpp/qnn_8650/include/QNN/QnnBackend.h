@@ -1,6 +1,6 @@
 //=============================================================================
 //
-//  Copyright (c) 2019-2023 Qualcomm Technologies, Inc.
+//  Copyright (c) 2019-2024 Qualcomm Technologies, Inc.
 //  All Rights Reserved.
 //  Confidential and Proprietary - Qualcomm Technologies, Inc.
 //
@@ -184,6 +184,28 @@ QNN_API
 Qnn_ErrorHandle_t QnnBackend_create(Qnn_LogHandle_t logger,
                                     const QnnBackend_Config_t** config,
                                     Qnn_BackendHandle_t* backend);
+/**
+ * @brief A function to set/modify configuration options on an already generated backend.
+ *
+ * @param[in] backend A backend handle.
+ *
+ * @param[in] config Pointer to a NULL terminated array of config option pointers.
+ *                   NULL is allowed and indicates no config options are provided.
+ *                   All config options have default value, in case not provided.
+ *                   If same config option type is provided multiple times,
+ *                   the last option value will be used.
+ *
+ * @return Error code:
+ *         - QNN_SUCCESS: no error is encountered
+ *         - QNN_BACKEND_ERROR_INVALID_HANDLE: _backend_ is not a valid handle
+ *         - QNN_BACKEND_ERROR_INVALID_CONFIG: at least one config option is invalid
+ *         - QNN_BACKEND_ERROR_NOT_SUPPORTED: an optional feature is not supported
+ *
+ * @note Use corresponding API through QnnInterface_t.
+ */
+QNN_API
+Qnn_ErrorHandle_t QnnBackend_setConfig(Qnn_BackendHandle_t backend,
+                                       const QnnBackend_Config_t** config);
 
 /**
  * @brief Get the QNN API version.
@@ -250,6 +272,8 @@ Qnn_ErrorHandle_t QnnBackend_getBuildId(const char** id);
  *         - QNN_BACKEND_ERROR_OP_PACKAGE_DUPLICATE: OpPackageName+OpName must be unique.
  *           Op package content information can be be obtained with QnnOpPackage interface.
  *           Indicates that an Op with the same package name and op name was already registered.
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION: SSR occurence (successful recovery)
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION_FATAL: SSR occurence (unsuccessful recovery)
  *
  * @note Use corresponding API through QnnInterface_t.
  */
@@ -273,6 +297,8 @@ Qnn_ErrorHandle_t QnnBackend_registerOpPackage(Qnn_BackendHandle_t backend,
  *         - QNN_SUCCESS: No error encountered
  *         - QNN_BACKEND_ERROR_INVALID_ARGUMENT: if _numOperations_ or _operations_ is NULL
  *         - QNN_BACKEND_ERROR_INVALID_HANDLE: _backend_ is not a valid handle
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION: SSR occurence (successful recovery)
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION_FATAL: SSR occurence (unsuccessful recovery)
  *
  * @note Use corresponding API through QnnInterface_t.
  */
@@ -321,6 +347,8 @@ Qnn_ErrorHandle_t QnnBackend_validateOpConfig(Qnn_BackendHandle_t backend, Qnn_O
  *           resources or failure to invalidate handles and pointers allocated
  *           by the library
  *         - QNN_BACKEND_ERROR_INVALID_HANDLE: _backend_ is not a valid handle
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION: SSR occurence (successful recovery)
+ *         - QNN_COMMON_ERROR_SYSTEM_COMMUNICATION_FATAL: SSR occurence (unsuccessful recovery)
  *
  * @note Use corresponding API through QnnInterface_t.
  */

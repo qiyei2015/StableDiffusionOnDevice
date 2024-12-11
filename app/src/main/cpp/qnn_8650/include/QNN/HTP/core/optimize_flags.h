@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include "weak_linkage.h"
 
+#ifndef PREPARE_DISABLED
+
 PUSH_VISIBILITY(default)
 
 namespace hnnx {
@@ -56,6 +58,8 @@ struct OptimFlags {
         tcm_migration_old_flag = flagbit<15>::val,
         // This is used to specify rules only used when centralized TCM is in use.
         tcm_migration_new_flag = flagbit<16>::val,
+        cp_after_if = flagbit<17>::val, // trigger CP when the rule succeeds
+        prepare_aux_graph = flagbit<18>::val // is this an aux graph prepare?
     };
     // :::<OPTIMFLAG_SYMBOLS
 
@@ -93,9 +97,9 @@ struct OptimFlags {
 
       public:
         OptFlagState() : m_trigger(0), m_need_cse(false), m_need_cp(false) {}
-        inline void update(flags_t previous_pass_flags, // GraphOptPass.flags from the previous pass
-                           flags_t next_pass_flags, // GraphOptPass.flags from the next pass
-                           flags_t success_flags) // 'or' of all rules which succeeded in previous pass.
+        API_EXPORT inline void update(flags_t previous_pass_flags, // GraphOptPass.flags from the previous pass
+                                      flags_t next_pass_flags, // GraphOptPass.flags from the next pass
+                                      flags_t success_flags) // 'or' of all rules which succeeded in previous pass.
         {
             flags_t const trigs = m_trigger;
             flags_t next_trigs = trigs | (success_flags & (any_rule | cse_set_triggerA | cse_set_triggerB));
@@ -104,7 +108,8 @@ struct OptimFlags {
                      ((success_flags & cse_after_if) != 0 || (previous_pass_flags & cse_after_always) != 0 ||
                       ((next_trigs & cse_set_triggerA) != 0 && (next_pass_flags & cse_before_if_triggerA) != 0) ||
                       ((next_trigs & cse_set_triggerB) != 0 && (next_pass_flags & cse_before_if_triggerB) != 0)));
-            bool const do_cp = (next_trigs & any_rule) != 0 && (previous_pass_flags & cp_after_always) != 0;
+            bool const do_cp = ((next_trigs & any_rule) != 0 &&
+                                ((success_flags & cp_after_if) != 0 || (previous_pass_flags & cp_after_always) != 0));
             if (do_cse) {
                 // we are going to do cse; so reset all triggers and return true
                 next_trigs = 0;
@@ -119,8 +124,8 @@ struct OptimFlags {
             m_need_cp = do_cp;
         }
 
-        inline bool need_cse() const { return m_need_cse; }
-        inline bool need_cp() const { return m_need_cp; }
+        API_EXPORT inline bool need_cse() const { return m_need_cse; }
+        API_EXPORT inline bool need_cp() const { return m_need_cp; }
     };
 
     // this is a trick to allow flags to be used in rules without namespace prefix
@@ -141,4 +146,5 @@ struct OptimFlags {
 
 POP_VISIBILITY()
 
+#endif
 #endif /* OPTIMIZE_FLAGS_H_ */
