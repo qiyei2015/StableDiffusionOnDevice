@@ -154,18 +154,20 @@ int QCOMModel::load(const std::string &path, int device_id) {
         }
     }
 
-    if (sample_app::StatusCode::SUCCESS != qnn_net->initializePerformance()) {
-        LOGE("initializePerformance() failure");
-        return -1;
-    }
-    if (sample_app::StatusCode::SUCCESS != qnn_net->setRpcPolling()) {
-        LOGE("setRpcPolling() failure");
-        return -1;
-    }
-    if (sample_app::StatusCode::SUCCESS != qnn_net->setHighPerformanceMode()) {
-        LOGE("setHighPerformanceMode failure");
-        return -1;
-    }
+//todo
+//    if (sample_app::StatusCode::SUCCESS != qnn_net->initializePerformance()) {
+//        LOGE("initializePerformance() failure");
+//        return -1;
+//    }
+//    if (sample_app::StatusCode::SUCCESS != qnn_net->setRpcPolling()) {
+//        LOGE("setRpcPolling() failure");
+//        return -1;
+//    }
+//    if (sample_app::StatusCode::SUCCESS != qnn_net->setHighPerformanceMode()) {
+//        LOGE("setHighPerformanceMode failure");
+//        return -1;
+//    }
+
     auto endTime = std::chrono::high_resolution_clock::now();
     auto elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(endTime - beginTime);
     LOGI("%s init cost: %f ms", model_name_.c_str(), (float) (elapsedTime.count() / 1000));

@@ -50,22 +50,24 @@ Java_com_xiaomi_stablediffusion_StableDiffusion_Init(JNIEnv *env,
                                                      jobject assetManager,
                                                      jstring jpath) {
     std::string path = JavaStringToString(env, jpath);
+
+    LOGI("StableDiffusion_Init path=%s",path.c_str());
     if (setenv("LD_LIBRARY_PATH", (path + "/stable_diffusion/qnn_lib_" + QCOM_VERSION +
                                    ":/vendor/dsp/cdsp:/vendor/lib64:/vendor/dsp/dsp:/vendor/dsp/images").c_str(),
                1) == 0) {
         // 成功设置环境变量
-        LOGI("setenv finished");
+        LOGI("setenv finished LD_LIBRARY_PATH");
     } else {
-        LOGE("setenv failed");
+        LOGE("setenv failed LD_LIBRARY_PATH");
         // 设置环境变量失败
     }
     if (setenv("ADSP_LIBRARY_PATH", (path + "/stable_diffusion/qnn_lib_" + QCOM_VERSION +
                                      ";/vendor/dsp/cdsp;/vendor/lib/rfsa/adsp;/system/lib/rfsa/adsp;/vendor/dsp/dsp;/vendor/dsp/images;/dsp").c_str(),
                1) == 0) {
         // 成功设置环境变量
-        LOGI("setenv finished");
+        LOGI("setenv finished ADSP_LIBRARY_PATH");
     } else {
-        LOGE("setenv failed");
+        LOGE("setenv failed ADSP_LIBRARY_PATH");
         // 设置环境变量失败
     }
 
