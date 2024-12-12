@@ -300,6 +300,90 @@ iotensor::PopulateInputTensorsRetType_t iotensor::IOTensor::populateInputTensors
   return {StatusCode::SUCCESS, numFilesPopulated, numBatchSize};
 }
 
+// Helper method to populate all input tensors.
+iotensor::StatusCode iotensor::IOTensor::populateInputTensors(
+        uint32_t graphIdx,
+        std::vector<uint8_t*> inputBuffers,
+        Qnn_Tensor_t* inputs,
+        qnn_wrapper_api::GraphInfo_t graphInfo,
+        iotensor::InputDataType inputDataType) {
+    if (nullptr == inputs) {
+        QNN_ERROR("inputs is nullptr");
+        return StatusCode::FAILURE;
+    }
+    auto inputCount = graphInfo.numInputTensors;
+    if (inputBuffers.size() != inputCount) {
+        QNN_ERROR("Incorrect amount of Input Buffers for graphIdx: %d. Expected: %d, received: %d",
+                  graphIdx,
+                  inputCount,
+                  inputBuffers.size());
+        return StatusCode::FAILURE;
+    }
+    for (size_t inputIdx = 0; inputIdx < inputCount; inputIdx++) {
+        if (StatusCode::SUCCESS !=
+            populateInputTensor(inputBuffers[inputIdx], &(inputs[inputIdx]), inputDataType)) {
+            QNN_DEBUG("populateInputTensor() failure for input: %d", inputIdx);
+            return StatusCode::FAILURE;
+        }
+    }
+    return StatusCode::SUCCESS;
+}
+
+// Helper method to populate an input tensor in the graph during execution.
+// It relies on reading data from buffer provided during executeGraph() call.
+iotensor::StatusCode iotensor::IOTensor::populateInputTensor(
+        uint8_t* buffer, Qnn_Tensor_t* input, iotensor::InputDataType inputDataType) {
+    if (nullptr == input) {
+        QNN_ERROR("input is nullptr");
+        return StatusCode::FAILURE;
+    }
+    std::vector<size_t> dims;
+    fillDims(dims, QNN_TENSOR_GET_DIMENSIONS(input), QNN_TENSOR_GET_RANK(input));
+    if (inputDataType == InputDataType::FLOAT &&
+        QNN_TENSOR_GET_DATA_TYPE(input) != QNN_DATATYPE_FLOAT_32) {
+        QNN_DEBUG("Received FLOAT input, but model needs non-float input");
+        if (StatusCode::SUCCESS != copyFromFloatToNative(reinterpret_cast<float*>(buffer), input)) {
+            QNN_DEBUG("copyFromFloatToNative failure");
+            return StatusCode::FAILURE;
+        }
+    } else {
+        size_t length;
+        datautil::StatusCode returnStatus;
+        std::tie(returnStatus, length) =
+                datautil::calculateLength(dims, QNN_TENSOR_GET_DATA_TYPE(input));
+        if (datautil::StatusCode::SUCCESS != returnStatus) {
+            return StatusCode::FAILURE;
+        }
+        pal::StringOp::memscpy(
+                reinterpret_cast<uint8_t*>(QNN_TENSOR_GET_CLIENT_BUF(input).data), length, buffer, length);
+    }
+    return StatusCode::SUCCESS;
+}
+
+//Helper method convert output to floatbuffer
+iotensor::StatusCode iotensor::IOTensor::converQnntensortoFloatBuffer(Qnn_Tensor_t* output,float** floatBuffer){
+
+    if (nullptr == output) {
+//    QNN_ERROR("output is nullptr");
+        return StatusCode::FAILURE;
+    }
+    auto returnStatus = StatusCode::SUCCESS;
+
+    returnStatus       = convertToFloat(floatBuffer, output);
+    // if(temp_buffer == nullptr){
+    //   QNN_INFO("ZZY ZZY I DONNOT BELIEVE IT !!!1");
+    // }
+    // else{
+    //   QNN_INFO("ZZY ZZY THAT IS MY ANSWER!!");
+    // }
+    //memcpy(floatBuffer,temp_buffer,sizeof(float)*16384);
+    if (StatusCode::SUCCESS != returnStatus) {
+//    QNN_ERROR("failure in convertToFloat");
+        return StatusCode::FAILURE;
+    }
+    return returnStatus;
+}
+
 // Setup details for Qnn_Tensor_t for execution
 // based on information in Qnn_TensorWrapper_t provided by model.so.
 iotensor::StatusCode iotensor::IOTensor::setupTensors(Qnn_Tensor_t** tensors,

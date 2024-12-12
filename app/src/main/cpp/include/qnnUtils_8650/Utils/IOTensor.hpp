@@ -62,6 +62,14 @@ class IOTensor {
       qnn_wrapper_api::GraphInfo_t graphInfo,
       iotensor::InputDataType inputDataType);
 
+  StatusCode populateInputTensors(uint32_t graphIdx,
+                                        std::vector<uint8_t *> inputBuffers,
+                                        Qnn_Tensor_t *inputs,
+                                        qnn_wrapper_api::GraphInfo_t graphInfo,
+                                        InputDataType inputDataType);
+
+  StatusCode converQnntensortoFloatBuffer(Qnn_Tensor_t *output,float **out);
+
   StatusCode tearDownInputAndOutputTensors(Qnn_Tensor_t *inputs,
                                            Qnn_Tensor_t *outputs,
                                            size_t numInputTensors,
@@ -73,6 +81,8 @@ class IOTensor {
                                                     const bool loopBackToStart,
                                                     Qnn_Tensor_t *input,
                                                     InputDataType inputDataType);
+
+  StatusCode populateInputTensor(uint8_t *buffer, Qnn_Tensor_t *input, InputDataType inputDataType);
 
   PopulateInputTensorsRetType_t readDataAndAllocateBuffer(const std::vector<std::string> &filePaths,
                                                           const size_t filePathsIndexOffset,

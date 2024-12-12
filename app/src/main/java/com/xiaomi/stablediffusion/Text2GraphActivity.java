@@ -56,6 +56,7 @@ public class Text2GraphActivity extends AppCompatActivity {
     private EditText negativePromptText;
     private TextView tv_time;
     private EditText seedText;
+    private EditText stepText;
     private int imgHeight = 512;
     private int imgWidth = 512;
 
@@ -208,7 +209,7 @@ public class Text2GraphActivity extends AppCompatActivity {
         positivePromptText = (EditText) findViewById(R.id.pos);
         negativePromptText = (EditText) findViewById(R.id.neg);
 //        negativePromptText = (EditText) findViewById(R.id.neg);
-//        stepText = (EditText) findViewById(R.id.step);
+        stepText = (EditText) findViewById(R.id.step);
         seedText = (EditText) findViewById(R.id.seed);
         showBitmap = Bitmap.createBitmap(imgWidth, imgHeight, Bitmap.Config.ARGB_8888);
         tv_time = (TextView) findViewById(R.id.tv_timer);
@@ -228,7 +229,6 @@ public class Text2GraphActivity extends AppCompatActivity {
                 getWindow().setFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
                 postivePrompt_en = positivePromptText.getText().toString();
                 negativePrompt_en = negativePromptText.getText().toString();
-                step = 20;
                 String text = seedText.getText().toString().replaceAll(" ", "");
                 if (text.equals("")) {
                     Toast.makeText(Text2GraphActivity.this, "Seed设置无效，请重新输入", Toast.LENGTH_LONG).show();
@@ -237,6 +237,17 @@ public class Text2GraphActivity extends AppCompatActivity {
                 } else {
                     seed = Integer.parseInt(text);
                 }
+                String stepStr = stepText.getText().toString().replaceAll(" ", "");
+                if (stepStr.equals("")) {
+                    Toast.makeText(Text2GraphActivity.this, "step设置无效，请重新输入", Toast.LENGTH_LONG).show();
+                    getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    return;
+                } else {
+                    step = Integer.parseInt(stepStr);
+                }
+                Log.i("AI", "step = " + step);
+
+
                 imgWidth = 512;
                 imgHeight = 512;
                 showBitmap = Bitmap.createBitmap(imgWidth, imgHeight, Bitmap.Config.ARGB_8888);

@@ -1,6 +1,6 @@
 #include "diffusion_solver.h"
 
-int DiffusionSolver::load(const string &path, int diffusion_mode) {
+int DiffusionSolver::load(const string &path, int diffusion_mode,int step) {
     int res = 0;
 
     if (diffusion_mode_ == diffusion_mode) {
@@ -9,7 +9,7 @@ int DiffusionSolver::load(const string &path, int diffusion_mode) {
     }
     if (diffusion_mode_ == 0) {
         scheduler = new scheduler_dpmpp_2m();
-        scheduler->set_timesteps(20);
+        scheduler->set_timesteps(step);
         path_ = path;
     }
     if (diffusion_mode == 1) {
@@ -60,13 +60,15 @@ int DiffusionSolver::CFGDenoiser_CompVisDenoiser(cv::Mat &input, float t,
 }
 
 int DiffusionSolver::sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc, cv::Mat &x_mat) {
-    load(path_, 1);
+    load(path_, 1,step);
 
     uNet.before_run();
     // init
     auto timesteps = scheduler->set_timesteps(step);
     x_mat = scheduler->randn_mat(seed % 100, latent_h, latent_w, 1); //generateLatentSample
     cv::Mat old_noised(cv::Size(latent_h, latent_w), CV_32FC4);
+
+    LOGI("sampler_txt2img,timesteps.size()= : %2d ",timesteps.size() );
 
     for (int i = 0; i < timesteps.size(); i++) {
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -77,11 +79,13 @@ int DiffusionSolver::sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc
             return -1;
         }
         auto t2 = std::chrono::high_resolution_clock::now();
+        LOGI("sampler_txt2img,scheduler->step before= : %2d ",i );
         x_mat = scheduler->step(i, x_mat, denoised, old_noised);
+        LOGI("sampler_txt2img,scheduler->step after= : %2d ",i );
         auto t3 = std::chrono::high_resolution_clock::now();
         auto elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
         auto elapsedTime1 = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2);
-        LOGI("Step: %2d / %lu  | %fms, %fms", i + 1, 20, (float) (elapsedTime.count() / 1000),
+        LOGI("Step: %2d / %lu  | %fms, %fms", i + 1, step, (float) (elapsedTime.count() / 1000),
              (float) (elapsedTime1.count() / 1000));
     }
     uNet.after_run();

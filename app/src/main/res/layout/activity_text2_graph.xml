@@ -132,14 +132,38 @@
             android:textStyle="bold" />
 
     </LinearLayout>
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="#C14454E0"
+        android:orientation="horizontal">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="30dp"
-        android:gravity="center"
-        android:text="steps = 20"
-        android:textColor="#FAF7F6"
-        android:textSize="18dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="60dp"
+            android:gravity="center"
+            android:text="steps"
+            android:textColor="#FAF7F6"
+            android:textSize="18dp" />
+
+        <EditText
+            android:id="@+id/step"
+            android:layout_width="100dp"
+            android:layout_height="match_parent"
+            android:layout_marginBottom="8dp"
+            android:layout_weight="5"
+            android:ems="10"
+            android:gravity="center"
+            android:hint="step"
+            android:inputType="textPersonName"
+            android:text="20"
+            android:textColor="#FAF7F6"
+            android:textSize="17sp"
+            android:theme="@style/EditTextStyle" />
+
+    </LinearLayout>
+
 
     <ImageView
         android:id="@+id/resView"

@@ -1,3 +1,11 @@
+//==============================================================================
+//
+//  Copyright (c) 2019-2023 Qualcomm Technologies, Inc.
+//  All Rights Reserved.
+//  Confidential and Proprietary - Qualcomm Technologies, Inc.
+//
+//==============================================================================
+
 #include <inttypes.h>
 #include <HTP/QnnHtpPerfInfrastructure.h>
 #include <QnnDevice.h>
@@ -22,12 +30,14 @@
 using namespace qnn;
 using namespace qnn::tools;
 
+// Default path where the outputs will be stored if outputPath is
+// not supplied.
 const std::string sample_app::QnnSampleApp::s_defaultOutputPath = "./output/";
 
 sample_app::QnnSampleApp::QnnSampleApp(QnnFunctionPointers qnnFunctionPointers,
                                        std::string inputListPaths,
                                        std::string opPackagePaths,
-                                       void *backendLibraryHandle,
+                                       void* backendLibraryHandle,
                                        std::string outputPath,
                                        bool debug,
                                        iotensor::OutputDataType outputDataType,
@@ -36,24 +46,24 @@ sample_app::QnnSampleApp::QnnSampleApp(QnnFunctionPointers qnnFunctionPointers,
                                        bool dumpOutputs,
                                        std::string cachedBinaryPath,
                                        std::string saveBinaryName)
-        : m_qnnFunctionPointers(qnnFunctionPointers),
-          m_outputPath(outputPath),
-          m_saveBinaryName(saveBinaryName),
-          m_cachedBinaryPath(cachedBinaryPath),
-          m_debug(debug),
-          m_outputDataType(outputDataType),
-          m_inputDataType(inputDataType),
-          m_profilingLevel(profilingLevel),
-          m_dumpOutputs(dumpOutputs),
-          m_backendLibraryHandle(backendLibraryHandle),
-          m_isBackendInitialized(false),
-          m_isContextCreated(false) {
-    split(m_inputListPaths, inputListPaths, ',');
-    split(m_opPackagePaths, opPackagePaths, ',');
-    if (m_outputPath.empty()) {
-        m_outputPath = s_defaultOutputPath;
-    }
-    return;
+    : m_qnnFunctionPointers(qnnFunctionPointers),
+      m_outputPath(outputPath),
+      m_saveBinaryName(saveBinaryName),
+      m_cachedBinaryPath(cachedBinaryPath),
+      m_debug(debug),
+      m_outputDataType(outputDataType),
+      m_inputDataType(inputDataType),
+      m_profilingLevel(profilingLevel),
+      m_dumpOutputs(dumpOutputs),
+      m_backendLibraryHandle(backendLibraryHandle),
+      m_isBackendInitialized(false),
+      m_isContextCreated(false) {
+  split(m_inputListPaths, inputListPaths, ',');
+  split(m_opPackagePaths, opPackagePaths, ',');
+  if (m_outputPath.empty()) {
+    m_outputPath = s_defaultOutputPath;
+  }
+  return;
 }
 
 sample_app::QnnSampleApp::~QnnSampleApp() {
@@ -98,16 +108,27 @@ std::string sample_app::QnnSampleApp::getBackendBuildId() {
     return (backendBuildId == nullptr ? std::string("") : std::string(backendBuildId));
 }
 
+// Initialize QnnSampleApp. Things it does:
+//  1. Create output directory
+//  2. Read all input list paths provided
+//      during creation.
 sample_app::StatusCode sample_app::QnnSampleApp::initialize() {
-    if (m_dumpOutputs && !::pal::FileOp::checkFileExists(m_outputPath) &&
-        !pal::Directory::makePath(m_outputPath)) {
-        LOGE("Could not create output directory:%s ", m_outputPath.c_str());
-    }
-
-    if (log::isLogInitialized()) {
-        auto logCallback = log::getLogCallback();
-        auto logLevel = log::getLogLevel();
-        LOGI("Initializing logging in the backend. Callback: [%p], Log Level: [%d]",
+  // Create Output Directory
+  if (m_dumpOutputs && !::pal::FileOp::checkFileExists(m_outputPath) &&
+      !pal::Directory::makePath(m_outputPath)) {
+    LOGE("Could not create output directory:%s ", m_outputPath.c_str());
+  }
+  // Read Input File List
+//  bool readSuccess;
+//  std::tie(m_inputFileLists, m_inputNameToIndex, readSuccess) = readInputLists(m_inputListPaths);
+//  if (!readSuccess) {
+//    exitWithMessage("Could not read input lists", EXIT_FAILURE);
+//  }
+  // initialize logging in the backend
+  if (log::isLogInitialized()) {
+    auto logCallback = log::getLogCallback();
+    auto logLevel    = log::getLogLevel();
+     LOGI("Initializing logging in the backend. Callback: [%p], Log Level: [%d]",
              logCallback,
              logLevel);
         if (QNN_SUCCESS !=
@@ -171,79 +192,95 @@ sample_app::StatusCode sample_app::QnnSampleApp::terminateBackend() {
     return StatusCode::SUCCESS;
 }
 
+// Register op packages and interface providers supplied during
+// object creation. If there are multiple op packages, register
+// them sequentially in the order provided.
 sample_app::StatusCode sample_app::QnnSampleApp::registerOpPackages() {
-    const size_t pathIdx = 0;
-    const size_t interfaceProviderIdx = 1;
-    for (auto const &opPackagePath: m_opPackagePaths) {
-        std::vector<std::string> opPackage;
-        split(opPackage, opPackagePath, ':');
-        LOGD("opPackagePath: %s", opPackagePath.c_str());
-        if (opPackage.size() != 2) {
-            LOGE("Malformed opPackageString provided: %s", opPackagePath.c_str());
-            return StatusCode::FAILURE;
-        }
-        if (nullptr == m_qnnFunctionPointers.qnnInterface.backendRegisterOpPackage) {
-            LOGE("backendRegisterOpPackageFnHandle is nullptr.");
-            return StatusCode::FAILURE;
-        }
-        if (QNN_BACKEND_NO_ERROR != m_qnnFunctionPointers.qnnInterface.backendRegisterOpPackage(
-                m_backendHandle,
-                (char *) opPackage[pathIdx].c_str(),
-                (char *) opPackage[interfaceProviderIdx].c_str(),
-                nullptr)) {
-            LOGE("Could not register Op Package: %s and interface provider: %s",
-                 opPackage[pathIdx].c_str(),
-                 opPackage[interfaceProviderIdx].c_str());
-            return StatusCode::FAILURE;
-        }
-        LOGI("Registered Op Package: %s and interface provider: %s",
+  const size_t pathIdx              = 0;
+  const size_t interfaceProviderIdx = 1;
+  for (auto const& opPackagePath : m_opPackagePaths) {
+    std::vector<std::string> opPackage;
+    split(opPackage, opPackagePath, ':');
+    LOGD("opPackagePath: %s", opPackagePath.c_str());
+    const char* target     = nullptr;
+    const size_t targetIdx = 2;
+    if (opPackage.size() != 2 && opPackage.size() != 3) {
+      LOGE("Malformed opPackageString provided: %s", opPackagePath.c_str());
+      return StatusCode::FAILURE;
+    }
+    if (opPackage.size() == 3) {
+      target = (char*)opPackage[targetIdx].c_str();
+    }
+    if (nullptr == m_qnnFunctionPointers.qnnInterface.backendRegisterOpPackage) {
+      LOGE("backendRegisterOpPackageFnHandle is nullptr.");
+      return StatusCode::FAILURE;
+    }
+    if (QNN_BACKEND_NO_ERROR != m_qnnFunctionPointers.qnnInterface.backendRegisterOpPackage(
+                                    m_backendHandle,
+                                    (char*)opPackage[pathIdx].c_str(),
+                                    (char*)opPackage[interfaceProviderIdx].c_str(),
+                                    target)) {
+      LOGE("Could not register Op Package: %s and interface provider: %s",
+                opPackage[pathIdx].c_str(),
+                opPackage[interfaceProviderIdx].c_str());
+      return StatusCode::FAILURE;
+    }
+    LOGI("Registered Op Package: %s and interface provider: %s",
              opPackage[pathIdx].c_str(),
              opPackage[interfaceProviderIdx].c_str());
-    }
-    return StatusCode::SUCCESS;
+  }
+  return StatusCode::SUCCESS;
 }
 
+// Create a Context in a backend.
 sample_app::StatusCode sample_app::QnnSampleApp::createContext() {
-    if (QNN_CONTEXT_NO_ERROR != m_qnnFunctionPointers.qnnInterface.contextCreate(
-            m_backendHandle,
-            m_deviceHandle,
-            (const QnnContext_Config_t **) &m_contextConfig,
-            &m_context)) {
-        LOGE("Could not create context");
-        return StatusCode::FAILURE;
-    }
-    m_isContextCreated = true;
-    return StatusCode::SUCCESS;
+  if (QNN_CONTEXT_NO_ERROR != m_qnnFunctionPointers.qnnInterface.contextCreate(
+                                  m_backendHandle,
+                                  m_deviceHandle,
+                                  (const QnnContext_Config_t**)&m_contextConfig,
+                                  &m_context)) {
+    LOGE("Could not create context");
+    return StatusCode::FAILURE;
+  }
+  m_isContextCreated = true;
+  return StatusCode::SUCCESS;
 }
 
+// Free context after done.
 sample_app::StatusCode sample_app::QnnSampleApp::freeContext() {
-    if (QNN_CONTEXT_NO_ERROR !=
-        m_qnnFunctionPointers.qnnInterface.contextFree(m_context, m_profileBackendHandle)) {
-        LOGE("Could not free context");
-        return StatusCode::FAILURE;
-    }
-    m_isContextCreated = false;
-    return StatusCode::SUCCESS;
+  if (QNN_CONTEXT_NO_ERROR !=
+      m_qnnFunctionPointers.qnnInterface.contextFree(m_context, m_profileBackendHandle)) {
+    LOGE("Could not free context");
+    return StatusCode::FAILURE;
+  }
+  m_isContextCreated = false;
+  return StatusCode::SUCCESS;
 }
 
+// Calls composeGraph function in QNN's model.so.
+// composeGraphs is supposed to populate graph related
+// information in m_graphsInfo and m_graphsCount.
+// m_debug is the option supplied to composeGraphs to
+// say that all intermediate tensors including output tensors
+// are expected to be read by the app.
 sample_app::StatusCode sample_app::QnnSampleApp::composeGraphs() {
-    auto returnStatus = StatusCode::SUCCESS;
-    if (qnn_wrapper_api::ModelError_t::MODEL_NO_ERROR !=
-        m_qnnFunctionPointers.composeGraphsFnHandle(
-                m_backendHandle,
-                m_qnnFunctionPointers.qnnInterface,
-                m_context,
-                (const qnn_wrapper_api::GraphConfigInfo_t **) m_graphConfigsInfo,
-                m_graphConfigsInfoCount,
-                &m_graphsInfo,
-                &m_graphsCount,
-                m_debug,
-                log::getLogCallback(),
-                log::getLogLevel())) {
-        LOGE("Failed in composeGraphs()");
-        returnStatus = StatusCode::FAILURE;
-    }
-    return returnStatus;
+  auto returnStatus = StatusCode::SUCCESS;
+  if (qnn_wrapper_api::ModelError_t::MODEL_NO_ERROR !=
+      m_qnnFunctionPointers.composeGraphsFnHandle(
+          m_backendHandle,
+          m_qnnFunctionPointers.qnnInterface,
+          m_context,
+          (const qnn_wrapper_api::GraphConfigInfo_t**)m_graphConfigsInfo,
+          m_graphConfigsInfoCount,
+          &m_graphsInfo,
+          &m_graphsCount,
+          m_debug,
+          log::getLogCallback(),
+          log::getLogLevel())) {
+    LOGE("Failed in composeGraphs()");
+    returnStatus = StatusCode::FAILURE;
+  }
+  return returnStatus;
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::finalizeGraphs() {
@@ -443,7 +480,7 @@ sample_app::StatusCode sample_app::QnnSampleApp::extractBackendProfilingInfo(
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::extractProfilingSubEvents(
-        QnnProfile_EventId_t profileEventId) {
+    QnnProfile_EventId_t profileEventId) {
     const QnnProfile_EventId_t *profileSubEvents{nullptr};
     uint32_t numSubEvents{0};
     if (QNN_PROFILE_NO_ERROR != m_qnnFunctionPointers.qnnInterface.profileGetSubEvents(
@@ -477,133 +514,64 @@ sample_app::StatusCode sample_app::QnnSampleApp::extractProfilingEvent(
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::verifyFailReturnStatus(Qnn_ErrorHandle_t errCode) {
-    auto returnStatus = sample_app::StatusCode::FAILURE;
-    switch (errCode) {
-        case QNN_COMMON_ERROR_SYSTEM_COMMUNICATION:
-            returnStatus = sample_app::StatusCode::FAILURE_SYSTEM_COMMUNICATION_ERROR;
-            break;
-        case QNN_COMMON_ERROR_SYSTEM:
-            returnStatus = sample_app::StatusCode::FAILURE_SYSTEM_ERROR;
-            break;
-        case QNN_COMMON_ERROR_NOT_SUPPORTED:
-            returnStatus = sample_app::StatusCode::QNN_FEATURE_UNSUPPORTED;
-            break;
-        default:
-            break;
-    }
-    return returnStatus;
+  auto returnStatus = sample_app::StatusCode::FAILURE;
+  switch (errCode) {
+    case QNN_COMMON_ERROR_SYSTEM_COMMUNICATION:
+      returnStatus = sample_app::StatusCode::FAILURE_SYSTEM_COMMUNICATION_ERROR;
+      break;
+    case QNN_COMMON_ERROR_SYSTEM:
+      returnStatus = sample_app::StatusCode::FAILURE_SYSTEM_ERROR;
+      break;
+    case QNN_COMMON_ERROR_NOT_SUPPORTED:
+      returnStatus = sample_app::StatusCode::QNN_FEATURE_UNSUPPORTED;
+      break;
+    default:
+      break;
+  }
+  return returnStatus;
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::isDevicePropertySupported() {
-    if (nullptr != m_qnnFunctionPointers.qnnInterface.propertyHasCapability) {
-        auto qnnStatus =
-                m_qnnFunctionPointers.qnnInterface.propertyHasCapability(QNN_PROPERTY_GROUP_DEVICE);
-        if (QNN_PROPERTY_NOT_SUPPORTED == qnnStatus ||
-            QNN_PROPERTY_ERROR_UNKNOWN_KEY == qnnStatus) {
-            LOGE("Device property not supported or not known to backend");
-            return StatusCode::FAILURE;
-        }
+  if (nullptr != m_qnnFunctionPointers.qnnInterface.propertyHasCapability) {
+    auto qnnStatus =
+        m_qnnFunctionPointers.qnnInterface.propertyHasCapability(QNN_PROPERTY_GROUP_DEVICE);
+    if (QNN_PROPERTY_NOT_SUPPORTED == qnnStatus) {
+      LOGW("Device property is not supported");
     }
-    return StatusCode::SUCCESS;
+    if (QNN_PROPERTY_ERROR_UNKNOWN_KEY == qnnStatus) {
+      LOGE("Device property is not known to backend");
+      return StatusCode::FAILURE;
+    }
+  }
+  return StatusCode::SUCCESS;
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::createDevice() {
-    if (nullptr != m_qnnFunctionPointers.qnnInterface.deviceCreate) {
-        auto qnnStatus =
-                m_qnnFunctionPointers.qnnInterface.deviceCreate(m_logHandle, nullptr,
-                                                                &m_deviceHandle);
-        if (QNN_SUCCESS != qnnStatus) {
-            LOGE("Failed to create device");
-            return verifyFailReturnStatus(qnnStatus);
-        }
+  if (nullptr != m_qnnFunctionPointers.qnnInterface.deviceCreate) {
+    auto qnnStatus =
+        m_qnnFunctionPointers.qnnInterface.deviceCreate(m_logHandle, nullptr, &m_deviceHandle);
+    if (QNN_SUCCESS != qnnStatus && QNN_DEVICE_ERROR_UNSUPPORTED_FEATURE != qnnStatus) {
+      LOGE("Failed to create device");
+      return verifyFailReturnStatus(qnnStatus);
     }
-    return StatusCode::SUCCESS;
+  }
+  return StatusCode::SUCCESS;
 }
 
 sample_app::StatusCode sample_app::QnnSampleApp::freeDevice() {
-    if (nullptr != m_qnnFunctionPointers.qnnInterface.deviceFree) {
-        auto qnnStatus = m_qnnFunctionPointers.qnnInterface.deviceFree(m_deviceHandle);
-        if (QNN_SUCCESS != qnnStatus) {
-            LOGE("Failed to free device");
-            return verifyFailReturnStatus(qnnStatus);
-        }
+  if (nullptr != m_qnnFunctionPointers.qnnInterface.deviceFree) {
+    auto qnnStatus = m_qnnFunctionPointers.qnnInterface.deviceFree(m_deviceHandle);
+    if (QNN_SUCCESS != qnnStatus && QNN_DEVICE_ERROR_UNSUPPORTED_FEATURE != qnnStatus) {
+      LOGE("Failed to free device");
+      return verifyFailReturnStatus(qnnStatus);
     }
-    return StatusCode::SUCCESS;
+  }
+  return StatusCode::SUCCESS;
 }
 
-sample_app::StatusCode sample_app::QnnSampleApp::initializePerformance() {
-    QnnDevice_Infrastructure_t deviceInfra = nullptr;
-    Qnn_ErrorHandle_t devErr =
-            m_qnnFunctionPointers.qnnInterface.deviceGetInfrastructure(&deviceInfra);
-    if (devErr != QNN_SUCCESS) {
-        QNN_ERROR("device error");
-        return StatusCode::FAILURE;
-    }
-    QnnHtpDevice_Infrastructure_t *htpInfra =
-            static_cast<QnnHtpDevice_Infrastructure_t *>(deviceInfra);
-    QnnHtpDevice_PerfInfrastructure_t *perfInfra = &htpInfra->perfInfra;
-    uint32_t powerConfigId = 1;
-    uint32_t deviceId = 0;
-    uint32_t coreId = 0;
-    perfInfra->createPowerConfigId(deviceId, coreId, &powerConfigId);
-    m_perfInfra = perfInfra;
-    m_powerConfigId = powerConfigId;
-    return StatusCode::SUCCESS;
-}
-
-sample_app::StatusCode sample_app::QnnSampleApp::setHighPerformanceMode() {
-    QnnHtpPerfInfrastructure_PowerConfig_t powerConfig;
-    memset(&powerConfig, 0, sizeof(powerConfig));
-    powerConfig.option =
-            QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_DCVS_V3;
-    powerConfig.dcvsV3Config.dcvsEnable = 0;
-    powerConfig.dcvsV3Config.setDcvsEnable = 1;
-    powerConfig.dcvsV3Config.contextId = m_powerConfigId;
-    powerConfig.dcvsV3Config.powerMode =
-            QNN_HTP_PERF_INFRASTRUCTURE_POWERMODE_PERFORMANCE_MODE;
-    powerConfig.dcvsV3Config.setSleepLatency =
-            1; // True to consider Latency parameter otherwise False
-    powerConfig.dcvsV3Config.setBusParams = 1; // True to consider Bus parameter otherwise False
-    powerConfig.dcvsV3Config.setCoreParams = 1; // True to consider Core parameter otherwise False
-    powerConfig.dcvsV3Config.sleepDisable = 0; // True to consider sleep/LPM modes, False to enable
-    powerConfig.dcvsV3Config.setSleepDisable =
-            0; // True to consider sleep disable/enable parameter otherwise False
-// Set Sleep latency parameter
-    uint32_t latencyValue = 40; // V73
-    powerConfig.dcvsV3Config.sleepLatency = latencyValue; // range 40-2000 micro sec
-// set Bus Clock Parameters (refer QnnHtpPerfInfrastructure_VoltageCorner_t enum)
-    powerConfig.dcvsV3Config.busVoltageCornerMin = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-    powerConfig.dcvsV3Config.busVoltageCornerTarget = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-    powerConfig.dcvsV3Config.busVoltageCornerMax = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-// set Core Clock Parameters (refer QnnHtpPerfInfrastructure_VoltageCorner_t enum)
-    powerConfig.dcvsV3Config.coreVoltageCornerMin = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-    powerConfig.dcvsV3Config.coreVoltageCornerTarget = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-    powerConfig.dcvsV3Config.coreVoltageCornerMax = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
-// Set power config with different performance parameters
-    const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs[] =
-            {&powerConfig, NULL};
-    if (m_perfInfra) {
-        m_perfInfra->setPowerConfig(m_powerConfigId, powerConfigs);
-    }
-    return StatusCode::SUCCESS;
-}
-
-sample_app::StatusCode sample_app::QnnSampleApp::setRpcPolling() {
-    if (m_rpcPollingTime > 0) {
-        QnnHtpPerfInfrastructure_PowerConfig_t rpcPollingTime;
-        memset(&rpcPollingTime, 0, sizeof(rpcPollingTime));
-        rpcPollingTime.option =
-                QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_RPC_POLLING_TIME;
-        rpcPollingTime.rpcPollingTimeConfig = m_rpcPollingTime;
-        const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs[] =
-                {&rpcPollingTime, NULL};
-        if (m_perfInfra) {
-            m_perfInfra->setPowerConfig(m_powerConfigId, powerConfigs);
-        }
-    }
-    return StatusCode::SUCCESS;
-}
-
+// executeGraphs() that is currently used by qnn-sample-app's main.cpp.
+// This function runs all the graphs present in model.so by reading
+// inputs from input_list based files and writes output to .raw files.
 sample_app::StatusCode sample_app::QnnSampleApp::execute_common_Graphs(
         const std::vector<uint8_t *> &input_node_values,
         std::vector<float *> &output_node_values,
@@ -628,15 +596,16 @@ sample_app::StatusCode sample_app::QnnSampleApp::execute_common_Graphs(
         for (auto input_node_value : input_node_values) {
             input_vec.push_back(input_node_value);
         }
-
+        LOGD("Starting populateInputTensors for graphIdx: %zu", graphIdx);
         if (iotensor::StatusCode::SUCCESS !=
-            m_ioTensor.populateInputTensors(graphIdx, input_vec, inputs, graphInfo,
+            m_ioTensor.populateInputTensors(graphIdx,input_vec, inputs, graphInfo,
                                             m_inputDataType)) {
             LOGE("Error in populateInputTensors");
             returnStatus = StatusCode::FAILURE;
             return returnStatus;
         }
         timer.add_record_point("prepare");
+        LOGD("Starting graphExecute for graphIdx: %zu", graphIdx);
         if (StatusCode::SUCCESS == returnStatus) {
             LOGD("Successfully populated input tensors for graphIdx: %zu", graphIdx);
             Qnn_ErrorHandle_t executeStatus = QNN_GRAPH_NO_ERROR;

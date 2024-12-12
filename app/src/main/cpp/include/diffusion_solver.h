@@ -10,7 +10,7 @@ using namespace std;
 
 class DiffusionSolver {
 public:
-    int load(const string &path, int diffusion_mode = 1);
+    int load(const string &path, int diffusion_mode = 1,int step = 20);
     void set_latent_size(int latent_size_h, int latent_size_w);
     int sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc, cv::Mat &x_mat);
     int unload();
