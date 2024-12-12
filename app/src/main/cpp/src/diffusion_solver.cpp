@@ -1,26 +1,21 @@
 #include "diffusion_solver.h"
 
-int DiffusionSolver::load(const string &path, int diffusion_mode,int step) {
+int DiffusionSolver::load(const string &path) {
     int res = 0;
 
-    if (diffusion_mode_ == diffusion_mode) {
-        LOGI("DiffusionSolver keep mode %d!", diffusion_mode);
+    res = uNet.load(path);
+    if (res < 0) {
+        LOGE("uNet load fail!");
         return res;
     }
-    if (diffusion_mode_ == 0) {
-        scheduler = new scheduler_dpmpp_2m();
-        scheduler->set_timesteps(step);
-        path_ = path;
-    }
-    if (diffusion_mode == 1) {
-        res = uNet.load(path);
-        if (res < 0) {
-            LOGE("uNet load fail!");
-            return res;
-        }
-        diffusion_mode_ = 1;
-    }
-    LOGI("DiffusionSolver load success with mode %d!", diffusion_mode);
+    LOGI("DiffusionSolver load success ,path= %s",path.c_str());
+    return res;
+}
+
+int DiffusionSolver::init_scheduler()  {
+    int res = 0;
+    scheduler = new scheduler_dpmpp_2m();
+    LOGI("DiffusionSolver init success with scheduler");
     return res;
 }
 
@@ -60,7 +55,7 @@ int DiffusionSolver::CFGDenoiser_CompVisDenoiser(cv::Mat &input, float t,
 }
 
 int DiffusionSolver::sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc, cv::Mat &x_mat) {
-    load(path_, 1,step);
+    init_scheduler();
 
     uNet.before_run();
     // init
@@ -68,7 +63,7 @@ int DiffusionSolver::sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc
     x_mat = scheduler->randn_mat(seed % 100, latent_h, latent_w, 1); //generateLatentSample
     cv::Mat old_noised(cv::Size(latent_h, latent_w), CV_32FC4);
 
-    LOGI("sampler_txt2img,timesteps.size()= : %2d ",timesteps.size() );
+    LOGI("sampler_txt2img,step = %2d,timesteps.size()= : %2zu ",step,timesteps.size() );
 
     for (int i = 0; i < timesteps.size(); i++) {
         auto t1 = std::chrono::high_resolution_clock::now();

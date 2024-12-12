@@ -10,7 +10,8 @@ using namespace std;
 
 class DiffusionSolver {
 public:
-    int load(const string &path, int diffusion_mode = 1,int step = 20);
+    int load(const string &path);
+    int init_scheduler();
     void set_latent_size(int latent_size_h, int latent_size_w);
     int sampler_txt2img(int seed, int step, cv::Mat &c, cv::Mat &uc, cv::Mat &x_mat);
     int unload();
@@ -30,8 +31,8 @@ private:
     int input_sample_size = 1 * latent_c * latent_h * latent_w;
 
     // 0 not init, 1 txt2img;
-    int diffusion_mode_ = 0;
-    string path_;
+    //int diffusion_mode_ = 0;
+    //string path_;
     scheduler_base *scheduler = nullptr;
     UNet uNet;
 };
